@@ -97,25 +97,25 @@ function App() {
   const closeMobileMenu = () => setIsMobileMenuOpen(false)
 
   return (
-    <div className="min-h-screen overflow-x-clip bg-black text-white selection:bg-white selection:text-black">
+    <div className="relative min-h-screen w-full max-w-[100vw] overflow-x-hidden bg-black text-white selection:bg-white selection:text-black">
       <div className="pointer-events-none fixed inset-0 -z-10 bg-[radial-gradient(circle_at_10%_10%,rgba(255,255,255,0.18),transparent_32%),radial-gradient(circle_at_86%_18%,rgba(255,255,255,0.13),transparent_30%),radial-gradient(circle_at_50%_90%,rgba(255,255,255,0.11),transparent_32%)]" />
 
-      <header className="sticky top-0 z-50 border-b border-white/10 bg-black/70 backdrop-blur-xl">
+      <header className="sticky top-0 z-50 w-full border-b border-white/10 bg-black/80 backdrop-blur-xl">
         <nav className="mx-auto flex w-full max-w-7xl items-center justify-between px-5 py-4 sm:px-7 lg:px-10">
-          <a href="#home" className="display-font text-lg tracking-[0.18em] text-white">
+          <a href="#home" className="display-font z-50 shrink-0 text-lg tracking-[0.18em] text-white">
             MADE BY VIC
           </a>
           <button
             type="button"
-            className={`mobile-menu-btn md:hidden ${isMobileMenuOpen ? 'is-open' : ''}`}
+            className="group absolute right-5 top-1/2 flex h-11 w-11 -translate-y-1/2 flex-col items-center justify-center gap-[6px] rounded-sm border border-white/20 bg-black/60 md:hidden"
             aria-label={isMobileMenuOpen ? 'Close menu' : 'Open menu'}
             aria-expanded={isMobileMenuOpen}
             aria-controls="mobile-nav"
             onClick={() => setIsMobileMenuOpen((prev) => !prev)}
           >
-            <span />
-            <span />
-            <span />
+            <span className={`block h-[1.5px] w-5 origin-center bg-white transition-all duration-300 ${isMobileMenuOpen ? 'translate-y-[7.5px] rotate-45' : ''}`} />
+            <span className={`block h-[1.5px] w-5 bg-white transition-all duration-300 ${isMobileMenuOpen ? 'opacity-0' : ''}`} />
+            <span className={`block h-[1.5px] w-5 origin-center bg-white transition-all duration-300 ${isMobileMenuOpen ? '-translate-y-[7.5px] -rotate-45' : ''}`} />
           </button>
           <div className="hidden items-center gap-7 text-xs tracking-[0.18em] text-white/70 md:flex">
             <a href="#services" className="story-link">
@@ -150,29 +150,29 @@ function App() {
           </div>
         </nav>
 
-        <div className={`mobile-menu-backdrop ${isMobileMenuOpen ? 'is-open' : ''}`} onClick={closeMobileMenu} />
-        <div id="mobile-nav" className={`mobile-menu-panel ${isMobileMenuOpen ? 'is-open' : ''}`}>
-          <a href="#services" className="mobile-menu-link" onClick={closeMobileMenu}>
-            SERVICES
-          </a>
-          <a href="#murals" className="mobile-menu-link" onClick={closeMobileMenu}>
-            MURALS
-          </a>
-          <a href="#digital-design" className="mobile-menu-link" onClick={closeMobileMenu}>
-            DIGITAL
-          </a>
-          <a href="#contact" className="mobile-menu-link" onClick={closeMobileMenu}>
-            CONTACT
-          </a>
-          {user && !loading ? (
-            <Link to="/profile" className="mobile-menu-link" onClick={closeMobileMenu}>
-              PROFILE ({firstName.toUpperCase()})
-            </Link>
-          ) : (
-            <Link to="/sign-in" className="mobile-menu-link" onClick={closeMobileMenu}>
-              SIGN IN
-            </Link>
-          )}
+        <div 
+          className={`fixed inset-0 top-[73px] z-40 bg-black/70 backdrop-blur-md transition-opacity duration-300 md:hidden ${isMobileMenuOpen ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0'}`} 
+          onClick={closeMobileMenu} 
+        />
+        <div 
+          id="mobile-nav" 
+          className={`fixed right-0 top-[73px] z-50 flex h-[calc(100svh-73px)] w-[85%] max-w-[320px] transform flex-col overflow-y-auto border-l border-white/10 bg-gradient-to-b from-[#0a0a0a] to-[#111] p-5 shadow-2xl transition-transform duration-300 md:hidden ${isMobileMenuOpen ? 'translate-x-0' : 'translate-x-full'}`}
+        >
+          <div className="mt-2 flex flex-col gap-3">
+            <a href="#services" className="border border-white/10 p-4 font-display text-[0.8rem] uppercase tracking-[0.18em] text-white/90 active:bg-white/5" onClick={closeMobileMenu}>SERVICES</a>
+            <a href="#murals" className="border border-white/10 p-4 font-display text-[0.8rem] uppercase tracking-[0.18em] text-white/90 active:bg-white/5" onClick={closeMobileMenu}>MURALS</a>
+            <a href="#digital-design" className="border border-white/10 p-4 font-display text-[0.8rem] uppercase tracking-[0.18em] text-white/90 active:bg-white/5" onClick={closeMobileMenu}>DIGITAL</a>
+            <a href="#contact" className="border border-white/10 p-4 font-display text-[0.8rem] uppercase tracking-[0.18em] text-white/90 active:bg-white/5" onClick={closeMobileMenu}>CONTACT</a>
+            {user && !loading ? (
+              <Link to="/profile" className="border border-white/10 p-4 font-display text-[0.8rem] uppercase tracking-[0.18em] text-white/90 active:bg-white/5" onClick={closeMobileMenu}>
+                PROFILE ({firstName.toUpperCase()})
+              </Link>
+            ) : (
+              <Link to="/sign-in" className="border border-white/10 p-4 font-display text-[0.8rem] uppercase tracking-[0.18em] text-white/90 active:bg-white/5" onClick={closeMobileMenu}>
+                SIGN IN
+              </Link>
+            )}
+          </div>
         </div>
       </header>
 
