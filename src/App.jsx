@@ -73,6 +73,7 @@ function SectionIntro({ tag, title, children }) {
 
 function App() {
   const [activeBanner, setActiveBanner] = useState(0)
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const { user, profile, loading } = useAuth()
 
   useEffect(() => {
@@ -83,8 +84,17 @@ function App() {
     return () => window.clearInterval(interval)
   }, [])
 
+  useEffect(() => {
+    document.body.style.overflow = isMobileMenuOpen ? 'hidden' : ''
+
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [isMobileMenuOpen])
+
   const fullName = profile?.full_name || user?.user_metadata?.full_name || ''
   const firstName = fullName.trim().split(/\s+/)[0] || 'Profile'
+  const closeMobileMenu = () => setIsMobileMenuOpen(false)
 
   return (
     <div className="min-h-screen overflow-x-clip bg-black text-white selection:bg-white selection:text-black">
@@ -95,6 +105,18 @@ function App() {
           <a href="#home" className="display-font text-lg tracking-[0.18em] text-white">
             MADE BY VIC
           </a>
+          <button
+            type="button"
+            className={`mobile-menu-btn md:hidden ${isMobileMenuOpen ? 'is-open' : ''}`}
+            aria-label={isMobileMenuOpen ? 'Close menu' : 'Open menu'}
+            aria-expanded={isMobileMenuOpen}
+            aria-controls="mobile-nav"
+            onClick={() => setIsMobileMenuOpen((prev) => !prev)}
+          >
+            <span />
+            <span />
+            <span />
+          </button>
           <div className="hidden items-center gap-7 text-xs tracking-[0.18em] text-white/70 md:flex">
             <a href="#services" className="story-link">
               SERVICES
@@ -127,6 +149,31 @@ function App() {
             )}
           </div>
         </nav>
+
+        <div className={`mobile-menu-backdrop ${isMobileMenuOpen ? 'is-open' : ''}`} onClick={closeMobileMenu} />
+        <div id="mobile-nav" className={`mobile-menu-panel ${isMobileMenuOpen ? 'is-open' : ''}`}>
+          <a href="#services" className="mobile-menu-link" onClick={closeMobileMenu}>
+            SERVICES
+          </a>
+          <a href="#murals" className="mobile-menu-link" onClick={closeMobileMenu}>
+            MURALS
+          </a>
+          <a href="#digital-design" className="mobile-menu-link" onClick={closeMobileMenu}>
+            DIGITAL
+          </a>
+          <a href="#contact" className="mobile-menu-link" onClick={closeMobileMenu}>
+            CONTACT
+          </a>
+          {user && !loading ? (
+            <Link to="/profile" className="mobile-menu-link" onClick={closeMobileMenu}>
+              PROFILE ({firstName.toUpperCase()})
+            </Link>
+          ) : (
+            <Link to="/sign-in" className="mobile-menu-link" onClick={closeMobileMenu}>
+              SIGN IN
+            </Link>
+          )}
+        </div>
       </header>
 
       <main>
