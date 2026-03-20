@@ -6,6 +6,8 @@ import App from './App.jsx'
 import AuthPage from './pages/AuthPage.jsx'
 import ProfilePage from './pages/ProfilePage.jsx'
 import ServicesPage from './pages/ServicesPage.jsx'
+import ServiceDetailPage from './pages/ServiceDetailPage.jsx'
+import ContactPage from './pages/ContactPage.jsx'
 import ScrollToTop from './components/ScrollToTop.jsx'
 import { AuthProvider } from './context/AuthContext.jsx'
 
@@ -17,6 +19,8 @@ createRoot(document.getElementById('root')).render(
         <Routes>
           <Route path="/" element={<App />} />
           <Route path="/services" element={<ServicesPage />} />
+          <Route path="/services/:slug" element={<ServiceDetailPage />} />
+          <Route path="/contact" element={<ContactPage />} />
           <Route path="/sign-in" element={<AuthPage />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="*" element={<Navigate to="/" replace />} />

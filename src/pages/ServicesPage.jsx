@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { FiEdit2, FiX } from 'react-icons/fi'
 import Cropper from 'react-easy-crop'
 import 'react-easy-crop/react-easy-crop.css'
@@ -15,29 +16,25 @@ const editableImageSlots = [
     key: 'services-hero',
     label: 'Services hero banner',
     aspect: 16 / 6,
-    defaultUrl:
-      'https://images.unsplash.com/photo-1577083165633-14ebcdb0f658?auto=format&fit=crop&w=2000&q=80',
+    defaultUrl: '',
   },
   {
     key: 'services-card-commissioned',
     label: 'Commission card',
     aspect: 4 / 3,
-    defaultUrl:
-      'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?auto=format&fit=crop&w=1300&q=80',
+    defaultUrl: '',
   },
   {
     key: 'services-card-mural',
     label: 'Mural card',
     aspect: 4 / 3,
-    defaultUrl:
-      'https://images.unsplash.com/photo-1592078615290-033ee584e267?auto=format&fit=crop&w=1300&q=80',
+    defaultUrl: '',
   },
   {
     key: 'services-card-canvas',
     label: 'Canvas card',
     aspect: 4 / 3,
-    defaultUrl:
-      'https://images.unsplash.com/photo-1578301978018-3005759f48f7?auto=format&fit=crop&w=1300&q=80',
+    defaultUrl: '',
   },
 ]
 
@@ -52,8 +49,14 @@ const createImage = (url) =>
 const getCroppedBlob = async (imageSrc, cropPixels, outputType = 'image/jpeg') => {
   const image = await createImage(imageSrc)
   const canvas = document.createElement('canvas')
-  canvas.width = cropPixels.width
-  canvas.height = cropPixels.height
+
+  // Keep the crop output under a safe render size to avoid canvas allocation failures.
+  const maxOutputSide = 2600
+  const outputWidth = Math.max(1, Math.round(cropPixels.width))
+  const outputHeight = Math.max(1, Math.round(cropPixels.height))
+  const scale = Math.min(1, maxOutputSide / Math.max(outputWidth, outputHeight))
+  canvas.width = Math.max(1, Math.floor(outputWidth * scale))
+  canvas.height = Math.max(1, Math.floor(outputHeight * scale))
 
   const ctx = canvas.getContext('2d')
   if (!ctx) {
@@ -68,8 +71,8 @@ const getCroppedBlob = async (imageSrc, cropPixels, outputType = 'image/jpeg') =
     cropPixels.height,
     0,
     0,
-    cropPixels.width,
-    cropPixels.height,
+    canvas.width,
+    canvas.height,
   )
 
   return new Promise((resolve, reject) => {
@@ -653,18 +656,21 @@ function ServicesPage() {
       title: 'Commission art',
       slotKey: 'services-card-commissioned',
       label: 'Commission art carousel',
+      slug: 'commissioned-art',
       items: resolveSlotItems('services-card-commissioned'),
     },
     {
       title: 'Mural Art',
       slotKey: 'services-card-mural',
       label: 'Mural art carousel',
+      slug: 'mural-art',
       items: resolveSlotItems('services-card-mural'),
     },
     {
       title: 'Canvas Art',
       slotKey: 'services-card-canvas',
       label: 'Canvas art carousel',
+      slug: 'canvas-art',
       items: resolveSlotItems('services-card-canvas'),
     },
   ]
@@ -674,7 +680,7 @@ function ServicesPage() {
       <SiteHeader transparent overlay solidAfterScroll solidScrollThreshold={headerSolidThreshold} />
 
       <main className="pb-16">
-        <section ref={heroSectionRef} className="relative h-[42vh] min-h-[300px] w-full overflow-hidden border-b border-black/10 sm:h-[52vh]">
+        <section ref={heroSectionRef} className="relative h-[42vh] min-h-[300px] w-full overflow-hidden border-b border-black/10 bg-black sm:h-[52vh]">
           {heroItems.map((item, index) => (
             <img
               key={item.id || item.image_url}
@@ -773,35 +779,48 @@ function ServicesPage() {
           <div className="grid gap-6 md:grid-cols-3">
             {cardsWithImage.map((card) => (
               <article key={card.title} className="space-y-3">
-                <div className="relative overflow-hidden border border-black/15 bg-white shadow-[0_12px_28px_rgba(0,0,0,0.1)]">
-                  <div className="relative h-[340px] w-full">
-                    {card.items.map((item, index) => {
-                      const activeIndex = Math.min(activeIndexBySlot[card.slotKey] || 0, Math.max(0, card.items.length - 1))
-                      return (
-                        <img
-                          key={item.id || item.image_url}
-                          src={item.image_url}
-                          alt={card.title}
-                          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-1000 ease-in-out ${
-                            index === activeIndex ? 'opacity-100' : 'opacity-0'
-                          }`}
-                        />
-                      )
-                    })}
+                <Link to={`/services/${card.slug}`} className="group block">
+                  <div className="relative overflow-hidden border border-black/15 bg-white shadow-[0_12px_28px_rgba(0,0,0,0.1)] transition duration-300 group-hover:shadow-[0_16px_34px_rgba(0,0,0,0.18)]">
+                    <div className="relative h-[340px] w-full">
+                      {card.items.length > 0 ? (
+                        card.items.map((item, index) => {
+                          const activeIndex = Math.min(activeIndexBySlot[card.slotKey] || 0, Math.max(0, card.items.length - 1))
+                          return (
+                            <img
+                              key={item.id || item.image_url}
+                              src={item.image_url}
+                              alt={card.title}
+                              className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-1000 ease-in-out ${
+                                index === activeIndex ? 'opacity-100' : 'opacity-0'
+                              }`}
+                            />
+                          )
+                        })
+                      ) : (
+                        <div className="absolute inset-0 bg-black" />
+                      )}
 
-                    {isAdmin ? (
-                      <button
-                        type="button"
-                        className="absolute right-3 top-3 inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/60 bg-black/65 text-white transition hover:border-white hover:bg-black/85"
-                        onClick={() => openSlotEditor(card.slotKey)}
-                        aria-label={`Edit ${card.title} carousel`}
-                      >
-                        <FiEdit2 size={15} />
-                      </button>
-                    ) : null}
+                      <div className="absolute inset-x-0 bottom-0 bg-[linear-gradient(180deg,transparent,rgba(0,0,0,0.7))] px-4 pb-4 pt-12 text-white opacity-0 transition duration-300 group-hover:opacity-100">
+                        <p className="display-font text-xs tracking-[0.25em]">OPEN SERVICE PAGE</p>
+                      </div>
+
+                      {isAdmin ? (
+                        <button
+                          type="button"
+                          className="absolute right-3 top-3 inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/60 bg-black/65 text-white transition hover:border-white hover:bg-black/85"
+                          onClick={(event) => {
+                            event.preventDefault()
+                            openSlotEditor(card.slotKey)
+                          }}
+                          aria-label={`Edit ${card.title} carousel`}
+                        >
+                          <FiEdit2 size={15} />
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
-                </div>
-                <h3 className="display-font text-4xl tracking-[0.01em] text-black">{card.title}</h3>
+                  <h3 className="display-font mt-3 text-4xl tracking-[0.01em] text-black">{card.title}</h3>
+                </Link>
               </article>
             ))}
           </div>

@@ -18,7 +18,18 @@ function SiteHeader({
   const firstName = fullName.trim().split(/\s+/)[0] || 'Profile'
 
   const closeMobileMenu = () => setIsMobileMenuOpen(false)
-  const toSection = (sectionId) => (isHome ? `#${sectionId}` : `/#${sectionId}`)
+  const toSection = (sectionId) => {
+    if (isHome) {
+      return `#${sectionId}`
+    }
+    if (sectionId === 'contact') {
+      return '/contact'
+    }
+    if (sectionId === 'services') {
+      return '/services'
+    }
+    return `/#${sectionId}`
+  }
 
   useEffect(() => {
     if (typeof onMobileMenuChange === 'function') {
