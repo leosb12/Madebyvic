@@ -28,6 +28,17 @@ body {
 	font-family: var(--body-font);
 }
 
+a,
+button,
+[role='button'],
+input[type='button'],
+input[type='submit'],
+input[type='reset'],
+input[type='file'],
+summary {
+	cursor: pointer;
+}
+
 .display-font {
 	font-family: var(--display-font);
 }

@@ -7,6 +7,7 @@ const profileFallback = (user) => ({
   email: user?.email ?? '',
   full_name: user?.user_metadata?.full_name ?? null,
   phone: user?.user_metadata?.phone ?? null,
+  is_admin: false,
 })
 
 export function AuthProvider({ children }) {
@@ -23,7 +24,7 @@ export function AuthProvider({ children }) {
     const { data } = await supabase
       .schema('app')
       .from('profiles')
-      .select('email, full_name, phone')
+      .select('email, full_name, phone, is_admin')
       .eq('id', user.id)
       .maybeSingle()
 

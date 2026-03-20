@@ -1,6 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
+import { FiEdit2, FiEye, FiX } from 'react-icons/fi'
+import Cropper from 'react-easy-crop'
+import 'react-easy-crop/react-easy-crop.css'
 import { useAuth } from './context/AuthContext'
+import { supabase, supabaseReady } from './lib/supabase'
 
 const services = [
   {
@@ -35,7 +40,71 @@ const process = [
   },
 ]
 
-const heroBanners = ['/banner.jpg', '/banner2.jpg']
+const defaultBannerSpeedMs = 5200
+const heroBucket = (import.meta.env.VITE_SUPABASE_HERO_BUCKET || 'hero-banners').trim()
+const bannersPerPage = 3
+
+const buildUniqueFileName = (fileName, existingNames) => {
+  const dotIndex = fileName.lastIndexOf('.')
+  const base = dotIndex > 0 ? fileName.slice(0, dotIndex) : fileName
+  const ext = dotIndex > 0 ? fileName.slice(dotIndex) : ''
+
+  let candidate = `${base}${ext}`
+  let suffix = 1
+
+  while (existingNames.has(candidate.toLowerCase())) {
+    candidate = `${base}(${suffix})${ext}`
+    suffix += 1
+  }
+
+  return candidate
+}
+
+const createImage = (url) =>
+  new Promise((resolve, reject) => {
+    const image = new Image()
+    image.onload = () => resolve(image)
+    image.onerror = reject
+    image.src = url
+  })
+
+const getCroppedBlob = async (imageSrc, cropPixels, outputType = 'image/jpeg') => {
+  const image = await createImage(imageSrc)
+  const canvas = document.createElement('canvas')
+  canvas.width = cropPixels.width
+  canvas.height = cropPixels.height
+
+  const ctx = canvas.getContext('2d')
+  if (!ctx) {
+    throw new Error('Could not prepare canvas context for crop.')
+  }
+
+  ctx.drawImage(
+    image,
+    cropPixels.x,
+    cropPixels.y,
+    cropPixels.width,
+    cropPixels.height,
+    0,
+    0,
+    cropPixels.width,
+    cropPixels.height,
+  )
+
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) {
+          reject(new Error('Failed to generate cropped image.'))
+          return
+        }
+        resolve(blob)
+      },
+      outputType,
+      0.92,
+    )
+  })
+}
 
 function ImagePlaceholder({ label, ratio = 'aspect-[4/3]' }) {
   return (
@@ -74,27 +143,359 @@ function SectionIntro({ tag, title, children }) {
 function App() {
   const [activeBanner, setActiveBanner] = useState(0)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [bannerItems, setBannerItems] = useState([])
+  const [bannerSpeedMs, setBannerSpeedMs] = useState(defaultBannerSpeedMs)
+  const [loadingBannerConfig, setLoadingBannerConfig] = useState(false)
+  const [savingBannerConfig, setSavingBannerConfig] = useState(false)
+  const [uploadingBannerFile, setUploadingBannerFile] = useState(false)
+  const [selectedBannerFileName, setSelectedBannerFileName] = useState('No file selected')
+  const [pendingBannerFile, setPendingBannerFile] = useState(null)
+  const [pendingBannerPreviewUrl, setPendingBannerPreviewUrl] = useState('')
+  const [showCropModal, setShowCropModal] = useState(false)
+  const [crop, setCrop] = useState({ x: 0, y: 0 })
+  const [zoom, setZoom] = useState(1)
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState(null)
+  const [speedInputSeconds, setSpeedInputSeconds] = useState(String(Math.round(defaultBannerSpeedMs / 1000)))
+  const [bannerAdminMessage, setBannerAdminMessage] = useState('')
+  const [bannerAdminError, setBannerAdminError] = useState('')
+  const [showBannerAdmin, setShowBannerAdmin] = useState(false)
+  const [bannerPage, setBannerPage] = useState(1)
+  const [previewBannerUrl, setPreviewBannerUrl] = useState('')
+  const [previewBannerName, setPreviewBannerName] = useState('')
+  const bannerFileInputRef = useRef(null)
   const { user, profile, loading } = useAuth()
 
+  const isAdmin = profile?.is_admin === true
+  const visibleBanners = bannerItems.filter((item) => item.is_active).map((item) => item.image_url)
+  const heroBanners = visibleBanners
+  const totalBannerPages = Math.max(1, Math.ceil(bannerItems.length / bannersPerPage))
+  const clampedBannerPage = Math.min(bannerPage, totalBannerPages)
+  const pageStart = (clampedBannerPage - 1) * bannersPerPage
+  const paginatedBannerItems = bannerItems.slice(pageStart, pageStart + bannersPerPage)
+  const shouldLockPageScroll = isMobileMenuOpen || showBannerAdmin || showCropModal
+
   useEffect(() => {
+    if (heroBanners.length <= 1) {
+      setActiveBanner(0)
+      return
+    }
+
     const interval = window.setInterval(() => {
       setActiveBanner((current) => (current + 1) % heroBanners.length)
-    }, 5200)
+    }, bannerSpeedMs)
 
     return () => window.clearInterval(interval)
-  }, [])
+  }, [heroBanners.length, bannerSpeedMs])
 
   useEffect(() => {
-    document.body.style.overflow = isMobileMenuOpen ? 'hidden' : ''
+    setActiveBanner(0)
+  }, [heroBanners.length])
+
+  useEffect(() => {
+    document.body.style.overflow = shouldLockPageScroll ? 'hidden' : ''
 
     return () => {
       document.body.style.overflow = ''
     }
-  }, [isMobileMenuOpen])
+  }, [shouldLockPageScroll])
 
   const fullName = profile?.full_name || user?.user_metadata?.full_name || ''
   const firstName = fullName.trim().split(/\s+/)[0] || 'Profile'
   const closeMobileMenu = () => setIsMobileMenuOpen(false)
+  const closeBannerPreview = () => {
+    setPreviewBannerUrl('')
+    setPreviewBannerName('')
+  }
+
+  useEffect(() => {
+    if (!isAdmin) {
+      setShowBannerAdmin(false)
+    }
+  }, [isAdmin])
+
+  useEffect(() => {
+    if (bannerPage > totalBannerPages) {
+      setBannerPage(totalBannerPages)
+    }
+  }, [bannerPage, totalBannerPages])
+
+  useEffect(() => {
+    return () => {
+      if (pendingBannerPreviewUrl) {
+        URL.revokeObjectURL(pendingBannerPreviewUrl)
+      }
+    }
+  }, [pendingBannerPreviewUrl])
+
+  const clearBannerFeedback = () => {
+    setBannerAdminError('')
+    setBannerAdminMessage('')
+  }
+
+  const extractStoragePathFromPublicUrl = (publicUrl) => {
+    if (!publicUrl || typeof publicUrl !== 'string') {
+      return null
+    }
+
+    const marker = `/object/public/${heroBucket}/`
+    const index = publicUrl.indexOf(marker)
+
+    if (index === -1) {
+      return null
+    }
+
+    const path = publicUrl.slice(index + marker.length)
+    return path || null
+  }
+
+  const getBannerDisplayName = (imageUrl) => {
+    const storagePath = extractStoragePathFromPublicUrl(imageUrl)
+    if (storagePath) {
+      const parts = storagePath.split('/').filter(Boolean)
+      return decodeURIComponent(parts[parts.length - 1] || storagePath)
+    }
+
+    try {
+      const url = new URL(imageUrl)
+      const parts = url.pathname.split('/').filter(Boolean)
+      return decodeURIComponent(parts[parts.length - 1] || imageUrl)
+    } catch {
+      return imageUrl
+    }
+  }
+
+  const loadBannerConfig = async () => {
+    if (!supabaseReady || !supabase) {
+      return
+    }
+
+    setLoadingBannerConfig(true)
+
+    const [imagesResponse, settingsResponse] = await Promise.all([
+      supabase
+        .schema('app')
+        .from('hero_images')
+        .select('id, image_url, sort_order, is_active')
+        .order('sort_order', { ascending: true })
+        .order('created_at', { ascending: true }),
+      supabase.schema('app').from('hero_settings').select('rotation_interval_ms').eq('id', 1).maybeSingle(),
+    ])
+
+    if (!imagesResponse.error && Array.isArray(imagesResponse.data)) {
+      setBannerItems(imagesResponse.data)
+    }
+
+    if (!settingsResponse.error && settingsResponse.data?.rotation_interval_ms) {
+      const safeSpeed = Math.max(1200, Number(settingsResponse.data.rotation_interval_ms) || defaultBannerSpeedMs)
+      setBannerSpeedMs(safeSpeed)
+      setSpeedInputSeconds(String(Math.round(safeSpeed / 1000)))
+    }
+
+    setLoadingBannerConfig(false)
+  }
+
+  useEffect(() => {
+    loadBannerConfig()
+  }, [])
+
+  const handleBannerFileSelect = (event) => {
+    clearBannerFeedback()
+
+    if (!isAdmin) {
+      setBannerAdminError('No tienes permisos para editar banners.')
+      return
+    }
+
+    if (!supabaseReady || !supabase) {
+      setBannerAdminError('Servicio temporalmente no disponible.')
+      return
+    }
+
+    const file = event.target.files?.[0]
+    if (!file) {
+      return
+    }
+
+    setSelectedBannerFileName(file.name)
+
+    if (!file.type.startsWith('image/')) {
+      setBannerAdminError('Only image files are allowed.')
+      event.target.value = ''
+      return
+    }
+
+    if (file.size > 12 * 1024 * 1024) {
+      setBannerAdminError('Image is too large. Max size is 12MB.')
+      event.target.value = ''
+      return
+    }
+
+    if (pendingBannerPreviewUrl) {
+      URL.revokeObjectURL(pendingBannerPreviewUrl)
+    }
+
+    const previewUrl = URL.createObjectURL(file)
+    setPendingBannerFile(file)
+    setPendingBannerPreviewUrl(previewUrl)
+    setCrop({ x: 0, y: 0 })
+    setZoom(1)
+    setCroppedAreaPixels(null)
+    setShowCropModal(true)
+    event.target.value = ''
+  }
+
+  const handleConfirmCroppedUpload = async () => {
+    clearBannerFeedback()
+
+    if (!pendingBannerFile || !pendingBannerPreviewUrl || !croppedAreaPixels) {
+      setBannerAdminError('Select and crop an image before uploading.')
+      return
+    }
+
+    const maxSortOrder = bannerItems.reduce((max, item) => Math.max(max, item.sort_order ?? 0), 0)
+    setSavingBannerConfig(true)
+    setUploadingBannerFile(true)
+
+    try {
+      const outputType = pendingBannerFile.type === 'image/png' ? 'image/png' : 'image/jpeg'
+      const croppedBlob = await getCroppedBlob(pendingBannerPreviewUrl, croppedAreaPixels, outputType)
+
+      const cleanFileName = pendingBannerFile.name.replace(/[\\/]+/g, '_').trim() || 'banner-image.jpg'
+      const existingNames = new Set(
+        bannerItems
+          .map((item) => getBannerDisplayName(item.image_url))
+          .filter(Boolean)
+          .map((name) => name.toLowerCase()),
+      )
+      const uniqueFileName = buildUniqueFileName(cleanFileName, existingNames)
+      const objectPath = `hero/${user?.id || 'admin'}/${uniqueFileName}`
+
+      const { error: uploadError } = await supabase.storage.from(heroBucket).upload(objectPath, croppedBlob, {
+        cacheControl: '3600',
+        upsert: false,
+        contentType: outputType,
+      })
+
+      if (uploadError) {
+        setBannerAdminError(uploadError.message)
+        return
+      }
+
+      const { data: publicUrlData } = supabase.storage.from(heroBucket).getPublicUrl(objectPath)
+      const imageUrl = publicUrlData?.publicUrl
+
+      if (!imageUrl) {
+        setBannerAdminError('Could not build public URL for uploaded image.')
+        return
+      }
+
+      const { error } = await supabase.schema('app').from('hero_images').insert({
+        image_url: imageUrl,
+        sort_order: maxSortOrder + 1,
+        is_active: true,
+      })
+
+      if (error) {
+        const permissionDenied = error.message?.toLowerCase().includes('permission denied')
+        setBannerAdminError(
+          permissionDenied ? 'No tienes permisos para modificar banners.' : 'No se pudo guardar el banner.',
+        )
+        return
+      }
+
+      setBannerAdminMessage('Banner image uploaded and added.')
+      await loadBannerConfig()
+      setShowCropModal(false)
+      setPendingBannerFile(null)
+      if (pendingBannerPreviewUrl) {
+        URL.revokeObjectURL(pendingBannerPreviewUrl)
+      }
+      setPendingBannerPreviewUrl('')
+    } catch (error) {
+      setBannerAdminError(error?.message || 'Unexpected error while cropping/uploading image.')
+    } finally {
+      setSavingBannerConfig(false)
+      setUploadingBannerFile(false)
+    }
+  }
+
+  const handleRemoveBanner = async (item) => {
+    clearBannerFeedback()
+
+    if (!isAdmin) {
+      setBannerAdminError('No tienes permisos para editar banners.')
+      return
+    }
+
+    if (!supabaseReady || !supabase) {
+      setBannerAdminError('Servicio temporalmente no disponible.')
+      return
+    }
+
+    setSavingBannerConfig(true)
+
+    const storagePath = extractStoragePathFromPublicUrl(item.image_url)
+
+    if (storagePath) {
+      await supabase.storage.from(heroBucket).remove([storagePath])
+    }
+
+    const { error } = await supabase.schema('app').from('hero_images').delete().eq('id', item.id)
+
+    if (error) {
+      const permissionDenied = error.message?.toLowerCase().includes('permission denied')
+      setBannerAdminError(
+        permissionDenied ? 'No tienes permisos para modificar banners.' : 'No se pudo eliminar el banner.',
+      )
+      setSavingBannerConfig(false)
+      return
+    }
+
+    setBannerAdminMessage('Banner removed.')
+    await loadBannerConfig()
+    setSavingBannerConfig(false)
+  }
+
+  const handleSaveSpeed = async () => {
+    clearBannerFeedback()
+
+    if (!isAdmin) {
+      setBannerAdminError('No tienes permisos para editar banners.')
+      return
+    }
+
+    if (!supabaseReady || !supabase) {
+      setBannerAdminError('Servicio temporalmente no disponible.')
+      return
+    }
+
+    const seconds = Number(speedInputSeconds)
+    if (!Number.isFinite(seconds) || seconds < 1.2 || seconds > 30) {
+      setBannerAdminError('Speed must be between 1.2 and 30 seconds.')
+      return
+    }
+
+    const rotationIntervalMs = Math.round(seconds * 1000)
+    setSavingBannerConfig(true)
+
+    const { error } = await supabase
+      .schema('app')
+      .from('hero_settings')
+      .upsert({ id: 1, rotation_interval_ms: rotationIntervalMs }, { onConflict: 'id' })
+
+    if (error) {
+      const permissionDenied = error.message?.toLowerCase().includes('permission denied')
+      setBannerAdminError(
+        permissionDenied ? 'No tienes permisos para cambiar la velocidad.' : 'No se pudo guardar la velocidad.',
+      )
+      setSavingBannerConfig(false)
+      return
+    }
+
+    setBannerSpeedMs(rotationIntervalMs)
+    setBannerAdminMessage('Rotation speed updated.')
+    setSavingBannerConfig(false)
+  }
 
   return (
     <div className="relative min-h-screen w-full max-w-[100vw] overflow-x-hidden bg-black text-white selection:bg-white selection:text-black">
@@ -178,6 +579,256 @@ function App() {
 
       <main>
         <section id="home" className="relative isolate min-h-[calc(100vh-73px)] overflow-hidden border-b border-white/15">
+          {isAdmin ? (
+            <div className="absolute right-4 top-4 z-30 sm:right-6 sm:top-6">
+              <button
+                type="button"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-sm border border-white/30 bg-black/55 text-white transition hover:border-white/70 hover:bg-black/75"
+                onClick={() => {
+                  clearBannerFeedback()
+                  setShowBannerAdmin((prev) => !prev)
+                }}
+                aria-label={showBannerAdmin ? 'Close banner settings' : 'Open banner settings'}
+                title={showBannerAdmin ? 'Close banner settings' : 'Edit banner'}
+              >
+                {showBannerAdmin ? <FiX size={17} /> : <FiEdit2 size={16} />}
+              </button>
+            </div>
+          ) : null}
+
+          {isAdmin && showBannerAdmin ? (
+            <div className="fixed inset-x-3 top-[88px] z-40 max-h-[calc(100dvh-100px)] sm:inset-x-6 sm:top-[96px] sm:max-h-[calc(100dvh-112px)] lg:inset-x-auto lg:right-8 lg:w-[560px]">
+              <div className="flex max-h-full flex-col overflow-hidden rounded-sm border border-white/20 bg-black/85 backdrop-blur-md">
+                <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/10 bg-black/90 px-5 py-4">
+                  <p className="display-font text-[11px] tracking-[0.2em] text-white/70">ADMIN BANNER SETTINGS</p>
+                  <button
+                    type="button"
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-sm border border-white/25 bg-black/55 text-white transition hover:border-white/70 hover:bg-black/80"
+                    onClick={() => setShowBannerAdmin(false)}
+                    aria-label="Cerrar panel"
+                    title="Cerrar"
+                  >
+                    <FiX size={15} />
+                  </button>
+                </div>
+                <div className="overflow-y-auto px-5 pb-5 max-h-[calc(100dvh-176px)] sm:max-h-[calc(100dvh-188px)]">
+                  <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto]">
+                    <label className="field-wrap">
+                      <span>Upload image</span>
+                      <input
+                        ref={bannerFileInputRef}
+                        type="file"
+                        accept="image/*"
+                        onChange={handleBannerFileSelect}
+                        disabled={savingBannerConfig || uploadingBannerFile}
+                        className="sr-only"
+                      />
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          className="action-btn action-btn-outline"
+                          onClick={() => bannerFileInputRef.current?.click()}
+                          disabled={savingBannerConfig || uploadingBannerFile}
+                        >
+                          Choose File
+                        </button>
+                        <p className="truncate text-sm text-white/70">{selectedBannerFileName}</p>
+                      </div>
+                    </label>
+                    <div className="hidden md:block" />
+                  </div>
+                  <p className="mt-2 text-xs text-white/60">
+                    Recommendation: use images under 1MB for faster loading and better performance.
+                  </p>
+
+                  <div className="mt-3 grid gap-3 md:grid-cols-[160px_auto] md:items-end">
+                    <label className="field-wrap">
+                      <span>Speed (seconds)</span>
+                      <input
+                        type="number"
+                        min="1.2"
+                        max="30"
+                        step="0.1"
+                        value={speedInputSeconds}
+                        onChange={(event) => setSpeedInputSeconds(event.target.value)}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className="action-btn action-btn-outline justify-center"
+                      onClick={handleSaveSpeed}
+                      disabled={savingBannerConfig}
+                    >
+                      Save Speed
+                    </button>
+                  </div>
+
+                  <div className="mt-4 grid gap-2 pr-1">
+                    {(loadingBannerConfig ? [] : paginatedBannerItems).map((item) => (
+                      <div
+                        key={item.id}
+                        className="flex flex-wrap items-center justify-between gap-3 border border-white/10 bg-black/30 px-3 py-2"
+                      >
+                        <p className="min-w-0 flex-1 truncate text-sm text-white/80">{getBannerDisplayName(item.image_url)}</p>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              className="inline-flex h-10 w-10 items-center justify-center rounded-sm border border-white/25 bg-black/50 text-white transition hover:border-white/70 hover:bg-black/80"
+                              onClick={() => {
+                                setPreviewBannerUrl(item.image_url)
+                                setPreviewBannerName(getBannerDisplayName(item.image_url))
+                              }}
+                              aria-label="Preview banner image"
+                              title="Preview image"
+                            >
+                              <FiEye size={16} />
+                            </button>
+                            <button
+                              type="button"
+                              className="action-btn action-btn-outline"
+                              onClick={() => handleRemoveBanner(item)}
+                              disabled={savingBannerConfig}
+                            >
+                              Remove
+                            </button>
+                          </div>
+                      </div>
+                    ))}
+                    {!loadingBannerConfig && bannerItems.length === 0 ? (
+                      <p className="text-sm text-white/65">No hay imagenes.</p>
+                    ) : null}
+                  </div>
+
+                  {!loadingBannerConfig && bannerItems.length > 0 ? (
+                    <div className="mt-3 flex items-center justify-between gap-2 border-t border-white/10 pt-3">
+                      <button
+                        type="button"
+                        className="action-btn action-btn-outline"
+                        onClick={() => setBannerPage((current) => Math.max(1, current - 1))}
+                        disabled={clampedBannerPage === 1}
+                      >
+                        Previous
+                      </button>
+                      <p className="text-xs uppercase tracking-[0.12em] text-white/70">
+                        Page {clampedBannerPage} / {totalBannerPages}
+                      </p>
+                      <button
+                        type="button"
+                        className="action-btn action-btn-outline"
+                        onClick={() => setBannerPage((current) => Math.min(totalBannerPages, current + 1))}
+                        disabled={clampedBannerPage === totalBannerPages}
+                      >
+                        Next
+                      </button>
+                    </div>
+                  ) : null}
+
+                  {bannerAdminError ? <p className="mt-3 text-sm text-red-300">{bannerAdminError}</p> : null}
+                  {bannerAdminMessage ? <p className="mt-3 text-sm text-emerald-300">{bannerAdminMessage}</p> : null}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {isAdmin && showCropModal ? (
+            <div className="fixed inset-x-0 bottom-0 top-[73px] z-40 bg-black/80 p-4 backdrop-blur-sm sm:p-6">
+              <div className="mx-auto flex h-full w-full max-w-3xl flex-col rounded-sm border border-white/20 bg-black/85 p-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="display-font text-xs tracking-[0.2em] text-white/70">CONFIRM BANNER CROP</p>
+                    <p className="mt-1 text-sm text-white/75">Please crop the image to a 16:9 frame before upload.</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-sm border border-white/25 bg-black/50 text-white"
+                    onClick={() => {
+                      setShowCropModal(false)
+                      setPendingBannerFile(null)
+                      if (pendingBannerPreviewUrl) {
+                        URL.revokeObjectURL(pendingBannerPreviewUrl)
+                      }
+                      setPendingBannerPreviewUrl('')
+                    }}
+                    aria-label="Close crop modal"
+                  >
+                    <FiX size={16} />
+                  </button>
+                </div>
+
+                <div className="relative min-h-0 flex-1 overflow-hidden rounded-sm border border-white/20 bg-black/70">
+                  <Cropper
+                    image={pendingBannerPreviewUrl}
+                    crop={crop}
+                    zoom={zoom}
+                    aspect={16 / 9}
+                    onCropChange={setCrop}
+                    onZoomChange={setZoom}
+                    onCropComplete={(_croppedArea, pixels) => setCroppedAreaPixels(pixels)}
+                    showGrid
+                  />
+                </div>
+
+                <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center">
+                  <label className="field-wrap">
+                    <span>Zoom</span>
+                    <input
+                      type="range"
+                      min={1}
+                      max={3}
+                      step={0.01}
+                      value={zoom}
+                      onChange={(event) => setZoom(Number(event.target.value))}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="action-btn action-btn-solid justify-center"
+                    onClick={handleConfirmCroppedUpload}
+                    disabled={savingBannerConfig || uploadingBannerFile || !croppedAreaPixels}
+                  >
+                    {uploadingBannerFile ? 'Uploading...' : 'Confirm and Upload'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {isAdmin && previewBannerUrl
+            ? createPortal(
+                <div
+                  className="fixed inset-x-0 bottom-0 top-[73px] z-[120] bg-black/80 p-4 backdrop-blur-sm sm:p-6"
+                  onClick={closeBannerPreview}
+                >
+                  <button
+                    type="button"
+                    className="fixed right-4 top-[88px] z-[130] inline-flex h-10 w-10 items-center justify-center rounded-sm border border-white/35 bg-black/70 text-white transition hover:border-white/80 hover:bg-black/90"
+                    onClick={closeBannerPreview}
+                    aria-label="Close image preview"
+                    title="Close"
+                  >
+                    <FiX size={18} />
+                  </button>
+                  <div
+                    className="mx-auto mt-2 w-full max-w-5xl overflow-hidden rounded-sm border border-white/20 bg-black/90"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+                      <p className="truncate text-sm uppercase tracking-[0.12em] text-white/75">{previewBannerName || 'Preview'}</p>
+                      <span className="inline-flex h-9 w-9" aria-hidden="true" />
+                    </div>
+                    <div className="max-h-[calc(100dvh-170px)] overflow-auto p-4">
+                      <img
+                        src={previewBannerUrl}
+                        alt={previewBannerName || 'Banner preview'}
+                        className="mx-auto block h-auto max-h-[calc(100dvh-210px)] w-full object-contain"
+                      />
+                    </div>
+                  </div>
+                </div>,
+                document.body,
+              )
+            : null}
+
           {heroBanners.map((banner, index) => (
             <img
               key={banner}
