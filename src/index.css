@@ -244,6 +244,32 @@ summary {
 	background: rgba(255, 255, 255, 0.09);
 }
 
+.cta-learn-more {
+	box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.4), 0 12px 26px rgba(255, 255, 255, 0.22);
+	animation: learn-more-breathe 2.3s ease-in-out infinite;
+}
+
+.cta-learn-more:hover {
+	animation-play-state: paused;
+	transform: translateY(-2px) scale(1.03);
+	box-shadow: 0 0 0 10px rgba(255, 255, 255, 0), 0 16px 30px rgba(255, 255, 255, 0.32);
+}
+
+@keyframes learn-more-breathe {
+	0% {
+		transform: translateY(0) scale(1);
+		box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.45), 0 10px 22px rgba(255, 255, 255, 0.2);
+	}
+	45% {
+		transform: translateY(-2px) scale(1.03);
+		box-shadow: 0 0 0 9px rgba(255, 255, 255, 0), 0 18px 34px rgba(255, 255, 255, 0.32);
+	}
+	100% {
+		transform: translateY(0) scale(1);
+		box-shadow: 0 0 0 0 rgba(255, 255, 255, 0), 0 10px 22px rgba(255, 255, 255, 0.2);
+	}
+}
+
 .field-wrap {
 	display: grid;
 	gap: 0.55rem;

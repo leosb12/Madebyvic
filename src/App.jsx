@@ -5,20 +5,24 @@ import { FiEdit2, FiEye, FiX } from 'react-icons/fi'
 import Cropper from 'react-easy-crop'
 import 'react-easy-crop/react-easy-crop.css'
 import { useAuth } from './context/AuthContext'
+import SiteHeader from './components/SiteHeader'
 import { supabase, supabaseReady } from './lib/supabase'
 
-const services = [
+const serviceDefinitions = [
   {
+    key: 'canvas-art',
     title: 'Canvas Art',
     description:
       'Premium canvas artwork designed to transform spaces through bold creativity and refined detail. Blending graffiti street art influence with refined fine line portraits, each piece delivers a bold yet sophisticated visual presence.',
   },
   {
+    key: 'commissioned-art',
     title: 'Commissioned Art',
     description:
       'Custom commissioned artwork created exclusively for you, bringing your vision to life across any medium from canvas and sneakers to apparel and unique one of one pieces. Each creation is handcrafted with my signature touch, blending bold creativity, refined detail, and personal expression. Every piece is designed to reflect individuality, tell a story, and elevate the space, style, or lifestyle it inhabits, turning ideas into striking, unforgettable art.',
   },
   {
+    key: 'mural-art',
     title: 'Mural Art',
     description:
       'Specializing in large-scale wall art designed to transform spaces and leave a lasting impression. From businesses and gyms to restaurants and private homes, each mural is custom-created to reflect the atmosphere, brand, or story behind the space. Every piece is thoughtfully designed and hand-painted to elevate the environment with powerful visual impact and timeless artistry.',
@@ -42,7 +46,10 @@ const process = [
 
 const defaultBannerSpeedMs = 5200
 const heroBucket = (import.meta.env.VITE_SUPABASE_HERO_BUCKET || 'hero-banners').trim()
+const serviceBucket = (import.meta.env.VITE_SUPABASE_SERVICE_BUCKET || 'service-images').trim()
 const bannersPerPage = 3
+const defaultHeroIntroText =
+  'Welcome to my Digital Art Gallery, a curated space where creativity, vision, and craftsmanship come together. Each piece is thoughtfully designed to capture emotion, tell a story, and elevate the spaces it lives in. From original artworks to limited edition prints, every creation reflects a commitment to detail, originality, and artistic expression.'
 
 const buildUniqueFileName = (fileName, existingNames) => {
   const dotIndex = fileName.lastIndexOf('.')
@@ -142,7 +149,7 @@ function SectionIntro({ tag, title, children }) {
 
 function App() {
   const [activeBanner, setActiveBanner] = useState(0)
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [isHeaderMobileMenuOpen, setIsHeaderMobileMenuOpen] = useState(false)
   const [bannerItems, setBannerItems] = useState([])
   const [bannerSpeedMs, setBannerSpeedMs] = useState(defaultBannerSpeedMs)
   const [loadingBannerConfig, setLoadingBannerConfig] = useState(false)
@@ -162,17 +169,37 @@ function App() {
   const [bannerPage, setBannerPage] = useState(1)
   const [previewBannerUrl, setPreviewBannerUrl] = useState('')
   const [previewBannerName, setPreviewBannerName] = useState('')
+  const [serviceImagesByKey, setServiceImagesByKey] = useState({})
+  const [savingServiceImageKey, setSavingServiceImageKey] = useState('')
+  const [serviceAdminMessage, setServiceAdminMessage] = useState('')
+  const [serviceAdminError, setServiceAdminError] = useState('')
+  const [showServiceCropModal, setShowServiceCropModal] = useState(false)
+  const [pendingServiceFile, setPendingServiceFile] = useState(null)
+  const [pendingServicePreviewUrl, setPendingServicePreviewUrl] = useState('')
+  const [pendingServiceKey, setPendingServiceKey] = useState('')
+  const [serviceCrop, setServiceCrop] = useState({ x: 0, y: 0 })
+  const [serviceZoom, setServiceZoom] = useState(1)
+  const [serviceCroppedAreaPixels, setServiceCroppedAreaPixels] = useState(null)
+  const [heroIntroText, setHeroIntroText] = useState(defaultHeroIntroText)
+  const [heroIntroInput, setHeroIntroInput] = useState(defaultHeroIntroText)
+  const [savingHeroIntro, setSavingHeroIntro] = useState(false)
+  const [showHeroTextEditor, setShowHeroTextEditor] = useState(false)
   const bannerFileInputRef = useRef(null)
-  const { user, profile, loading } = useAuth()
+  const { user, profile } = useAuth()
 
   const isAdmin = profile?.is_admin === true
   const visibleBanners = bannerItems.filter((item) => item.is_active).map((item) => item.image_url)
   const heroBanners = visibleBanners
+  const services = serviceDefinitions.map((service) => ({
+    ...service,
+    imageUrl: serviceImagesByKey[service.key]?.image_url || '',
+  }))
   const totalBannerPages = Math.max(1, Math.ceil(bannerItems.length / bannersPerPage))
   const clampedBannerPage = Math.min(bannerPage, totalBannerPages)
   const pageStart = (clampedBannerPage - 1) * bannersPerPage
   const paginatedBannerItems = bannerItems.slice(pageStart, pageStart + bannersPerPage)
-  const shouldLockPageScroll = isMobileMenuOpen || showBannerAdmin || showCropModal
+  const shouldLockPageScroll =
+    isHeaderMobileMenuOpen || showBannerAdmin || showCropModal || showHeroTextEditor || showServiceCropModal
 
   useEffect(() => {
     if (heroBanners.length <= 1) {
@@ -199,9 +226,6 @@ function App() {
     }
   }, [shouldLockPageScroll])
 
-  const fullName = profile?.full_name || user?.user_metadata?.full_name || ''
-  const firstName = fullName.trim().split(/\s+/)[0] || 'Profile'
-  const closeMobileMenu = () => setIsMobileMenuOpen(false)
   const closeBannerPreview = () => {
     setPreviewBannerUrl('')
     setPreviewBannerName('')
@@ -210,6 +234,7 @@ function App() {
   useEffect(() => {
     if (!isAdmin) {
       setShowBannerAdmin(false)
+      setShowHeroTextEditor(false)
     }
   }, [isAdmin])
 
@@ -224,8 +249,11 @@ function App() {
       if (pendingBannerPreviewUrl) {
         URL.revokeObjectURL(pendingBannerPreviewUrl)
       }
+      if (pendingServicePreviewUrl) {
+        URL.revokeObjectURL(pendingServicePreviewUrl)
+      }
     }
-  }, [pendingBannerPreviewUrl])
+  }, [pendingBannerPreviewUrl, pendingServicePreviewUrl])
 
   const clearBannerFeedback = () => {
     setBannerAdminError('')
@@ -271,7 +299,7 @@ function App() {
 
     setLoadingBannerConfig(true)
 
-    const [imagesResponse, settingsResponse] = await Promise.all([
+    const [imagesResponse, settingsResponse, introResponse, serviceImagesResponse] = await Promise.all([
       supabase
         .schema('app')
         .from('hero_images')
@@ -279,6 +307,12 @@ function App() {
         .order('sort_order', { ascending: true })
         .order('created_at', { ascending: true }),
       supabase.schema('app').from('hero_settings').select('rotation_interval_ms').eq('id', 1).maybeSingle(),
+      supabase.schema('app').from('hero_content').select('intro_text').eq('id', 1).maybeSingle(),
+      supabase
+        .schema('app')
+        .from('service_images')
+        .select('id, service_key, image_url')
+        .order('created_at', { ascending: false }),
     ])
 
     if (!imagesResponse.error && Array.isArray(imagesResponse.data)) {
@@ -289,6 +323,22 @@ function App() {
       const safeSpeed = Math.max(1200, Number(settingsResponse.data.rotation_interval_ms) || defaultBannerSpeedMs)
       setBannerSpeedMs(safeSpeed)
       setSpeedInputSeconds(String(Math.round(safeSpeed / 1000)))
+    }
+
+    if (!introResponse.error && introResponse.data?.intro_text) {
+      const intro = String(introResponse.data.intro_text)
+      setHeroIntroText(intro)
+      setHeroIntroInput(intro)
+    }
+
+    if (!serviceImagesResponse.error && Array.isArray(serviceImagesResponse.data)) {
+      const nextMap = {}
+      for (const row of serviceImagesResponse.data) {
+        if (row?.service_key && !nextMap[row.service_key]) {
+          nextMap[row.service_key] = row
+        }
+      }
+      setServiceImagesByKey(nextMap)
     }
 
     setLoadingBannerConfig(false)
@@ -497,85 +547,217 @@ function App() {
     setSavingBannerConfig(false)
   }
 
+  const handleSaveHeroIntro = async () => {
+    clearBannerFeedback()
+
+    if (!isAdmin) {
+      setBannerAdminError('No tienes permisos para editar el texto.')
+      return
+    }
+
+    if (!supabaseReady || !supabase) {
+      setBannerAdminError('Servicio temporalmente no disponible.')
+      return
+    }
+
+    const nextText = heroIntroInput.trim()
+    if (!nextText) {
+      setBannerAdminError('El texto no puede estar vacio.')
+      return
+    }
+
+    setSavingHeroIntro(true)
+
+    const { error } = await supabase
+      .schema('app')
+      .from('hero_content')
+      .upsert({ id: 1, intro_text: nextText }, { onConflict: 'id' })
+
+    if (error) {
+      const permissionDenied = error.message?.toLowerCase().includes('permission denied')
+      setBannerAdminError(
+        permissionDenied ? 'No tienes permisos para editar el texto.' : 'No se pudo guardar el texto.',
+      )
+      setSavingHeroIntro(false)
+      return
+    }
+
+    setHeroIntroText(nextText)
+    setHeroIntroInput(nextText)
+    setShowHeroTextEditor(false)
+    setBannerAdminMessage('Hero text updated.')
+    setSavingHeroIntro(false)
+  }
+
+  const clearServiceFeedback = () => {
+    setServiceAdminError('')
+    setServiceAdminMessage('')
+  }
+
+  const closeServiceCropModal = () => {
+    if (pendingServicePreviewUrl) {
+      URL.revokeObjectURL(pendingServicePreviewUrl)
+    }
+    setShowServiceCropModal(false)
+    setPendingServicePreviewUrl('')
+    setPendingServiceFile(null)
+    setPendingServiceKey('')
+    setServiceCrop({ x: 0, y: 0 })
+    setServiceZoom(1)
+    setServiceCroppedAreaPixels(null)
+  }
+
+  const handleServiceImageUpload = (serviceKey, event) => {
+    clearServiceFeedback()
+
+    if (!isAdmin) {
+      setServiceAdminError('No tienes permisos para editar imagenes de servicios.')
+      return
+    }
+
+    const file = event.target.files?.[0]
+    if (!file) {
+      return
+    }
+
+    if (!file.type.startsWith('image/')) {
+      setServiceAdminError('Only image files are allowed.')
+      event.target.value = ''
+      return
+    }
+
+    if (pendingServicePreviewUrl) {
+      URL.revokeObjectURL(pendingServicePreviewUrl)
+    }
+
+    const previewUrl = URL.createObjectURL(file)
+    setPendingServiceFile(file)
+    setPendingServicePreviewUrl(previewUrl)
+    setPendingServiceKey(serviceKey)
+    setServiceCrop({ x: 0, y: 0 })
+    setServiceZoom(1)
+    setServiceCroppedAreaPixels(null)
+    setShowServiceCropModal(true)
+    event.target.value = ''
+  }
+
+  const handleConfirmServiceCroppedUpload = async () => {
+    clearServiceFeedback()
+
+    if (!isAdmin) {
+      setServiceAdminError('No tienes permisos para editar imagenes de servicios.')
+      return
+    }
+
+    if (!supabaseReady || !supabase) {
+      setServiceAdminError('Servicio temporalmente no disponible.')
+      return
+    }
+
+    if (!pendingServiceFile || !pendingServicePreviewUrl || !pendingServiceKey || !serviceCroppedAreaPixels) {
+      setServiceAdminError('Select an image and adjust the crop before uploading.')
+      return
+    }
+
+    setSavingServiceImageKey(pendingServiceKey)
+
+    const outputType = pendingServiceFile.type?.startsWith('image/png') ? 'image/png' : 'image/jpeg'
+
+    let croppedBlob
+    try {
+      croppedBlob = await getCroppedBlob(pendingServicePreviewUrl, serviceCroppedAreaPixels, outputType)
+    } catch {
+      setServiceAdminError('No se pudo recortar la imagen del servicio.')
+      setSavingServiceImageKey('')
+      return
+    }
+
+    const extension = outputType === 'image/png' ? 'png' : 'jpg'
+    const baseName =
+      pendingServiceFile.name
+        .replace(/\.[^.]+$/, '')
+        .replace(/[^a-zA-Z0-9-_]+/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '') || pendingServiceKey
+    const cleanFileName = `${baseName}-${Date.now()}.${extension}`
+    const objectPath = `services/${user?.id || 'admin'}/${pendingServiceKey}/${cleanFileName}`
+
+    const { error: uploadError } = await supabase.storage.from(serviceBucket).upload(objectPath, croppedBlob, {
+      cacheControl: '3600',
+      upsert: true,
+      contentType: outputType,
+    })
+
+    if (uploadError) {
+      setServiceAdminError('No se pudo subir la imagen del servicio.')
+      setSavingServiceImageKey('')
+      return
+    }
+
+    const { data: publicUrlData } = supabase.storage.from(serviceBucket).getPublicUrl(objectPath)
+    const imageUrl = publicUrlData?.publicUrl
+
+    if (!imageUrl) {
+      setServiceAdminError('No se pudo generar la URL de la imagen.')
+      setSavingServiceImageKey('')
+      return
+    }
+
+    const existing = serviceImagesByKey[pendingServiceKey]
+    const marker = `/object/public/${serviceBucket}/`
+    const idx = existing?.image_url ? existing.image_url.indexOf(marker) : -1
+    const oldPath = idx === -1 ? null : existing.image_url.slice(idx + marker.length)
+
+    const payload = {
+      service_key: pendingServiceKey,
+      image_url: imageUrl,
+    }
+
+    const { error: dbError } = await supabase
+      .schema('app')
+      .from('service_images')
+      .upsert(payload, { onConflict: 'service_key' })
+
+    if (dbError) {
+      await supabase.storage.from(serviceBucket).remove([objectPath])
+      setServiceAdminError('No se pudo guardar la imagen del servicio.')
+      setSavingServiceImageKey('')
+      return
+    }
+
+    if (oldPath && oldPath !== objectPath) {
+      const { error: oldDeleteError } = await supabase.storage.from(serviceBucket).remove([oldPath])
+      if (oldDeleteError) {
+        setServiceAdminError('La imagen nueva se guardo, pero no se pudo borrar la imagen anterior del bucket.')
+      }
+    }
+
+    const folderPath = `services/${user?.id || 'admin'}/${pendingServiceKey}`
+    const { data: folderFiles, error: listError } = await supabase.storage.from(serviceBucket).list(folderPath)
+    if (!listError && Array.isArray(folderFiles)) {
+      const pathsToDelete = folderFiles
+        .filter((file) => file?.name && file.name !== cleanFileName)
+        .map((file) => `${folderPath}/${file.name}`)
+
+      if (pathsToDelete.length > 0) {
+        const { error: cleanupError } = await supabase.storage.from(serviceBucket).remove(pathsToDelete)
+        if (cleanupError) {
+          setServiceAdminError('La imagen nueva se guardo, pero no se pudieron limpiar archivos viejos del bucket.')
+        }
+      }
+    }
+
+    await loadBannerConfig()
+    setServiceAdminMessage('Service image updated.')
+    setSavingServiceImageKey('')
+    closeServiceCropModal()
+  }
+
   return (
     <div className="relative min-h-screen w-full max-w-[100vw] overflow-x-hidden bg-black text-white selection:bg-white selection:text-black">
       <div className="pointer-events-none fixed inset-0 -z-10 bg-[radial-gradient(circle_at_10%_10%,rgba(255,255,255,0.18),transparent_32%),radial-gradient(circle_at_86%_18%,rgba(255,255,255,0.13),transparent_30%),radial-gradient(circle_at_50%_90%,rgba(255,255,255,0.11),transparent_32%)]" />
 
-      <header className="sticky top-0 z-50 w-full border-b border-white/10 bg-black/80 backdrop-blur-xl">
-        <nav className="mx-auto flex w-full max-w-7xl items-center justify-between px-5 py-4 sm:px-7 lg:px-10">
-          <a href="#home" className="display-font z-50 shrink-0 text-lg tracking-[0.18em] text-white">
-            MADE BY VIC
-          </a>
-          <button
-            type="button"
-            className="group absolute right-5 top-1/2 flex h-11 w-11 -translate-y-1/2 flex-col items-center justify-center gap-[6px] rounded-sm border border-white/20 bg-black/60 md:hidden"
-            aria-label={isMobileMenuOpen ? 'Close menu' : 'Open menu'}
-            aria-expanded={isMobileMenuOpen}
-            aria-controls="mobile-nav"
-            onClick={() => setIsMobileMenuOpen((prev) => !prev)}
-          >
-            <span className={`block h-[1.5px] w-5 origin-center bg-white transition-all duration-300 ${isMobileMenuOpen ? 'translate-y-[7.5px] rotate-45' : ''}`} />
-            <span className={`block h-[1.5px] w-5 bg-white transition-all duration-300 ${isMobileMenuOpen ? 'opacity-0' : ''}`} />
-            <span className={`block h-[1.5px] w-5 origin-center bg-white transition-all duration-300 ${isMobileMenuOpen ? '-translate-y-[7.5px] -rotate-45' : ''}`} />
-          </button>
-          <div className="hidden items-center gap-7 text-xs tracking-[0.18em] text-white/70 md:flex">
-            <a href="#services" className="story-link">
-              SERVICES
-            </a>
-            <a href="#murals" className="story-link">
-              MURALS
-            </a>
-            <a href="#digital-design" className="story-link">
-              DIGITAL
-            </a>
-            <a href="#contact" className="story-link">
-              CONTACT
-            </a>
-            {user && !loading ? (
-              <Link to="/profile" className="story-link nav-user-link">
-                <span className="nav-user-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" role="presentation">
-                    <path
-                      d="M12 11c2.761 0 5-2.462 5-5.5S14.761 0 12 0 7 2.462 7 5.5 9.239 11 12 11zm0 2c-4.42 0-8 2.91-8 6.5V24h16v-4.5c0-3.59-3.58-6.5-8-6.5z"
-                      fill="currentColor"
-                    />
-                  </svg>
-                </span>
-                {firstName.toUpperCase()}
-              </Link>
-            ) : (
-              <Link to="/sign-in" className="story-link">
-                SIGN IN
-              </Link>
-            )}
-          </div>
-        </nav>
-
-        <div 
-          className={`fixed inset-0 top-[73px] z-40 bg-black/70 backdrop-blur-md transition-opacity duration-300 md:hidden ${isMobileMenuOpen ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0'}`} 
-          onClick={closeMobileMenu} 
-        />
-        <div 
-          id="mobile-nav" 
-          className={`fixed right-0 top-[73px] z-50 flex h-[calc(100svh-73px)] w-[85%] max-w-[320px] transform flex-col overflow-y-auto border-l border-white/10 bg-gradient-to-b from-[#0a0a0a] to-[#111] p-5 shadow-2xl transition-transform duration-300 md:hidden ${isMobileMenuOpen ? 'translate-x-0' : 'translate-x-full'}`}
-        >
-          <div className="mt-2 flex flex-col gap-3">
-            <a href="#services" className="border border-white/10 p-4 font-display text-[0.8rem] uppercase tracking-[0.18em] text-white/90 active:bg-white/5" onClick={closeMobileMenu}>SERVICES</a>
-            <a href="#murals" className="border border-white/10 p-4 font-display text-[0.8rem] uppercase tracking-[0.18em] text-white/90 active:bg-white/5" onClick={closeMobileMenu}>MURALS</a>
-            <a href="#digital-design" className="border border-white/10 p-4 font-display text-[0.8rem] uppercase tracking-[0.18em] text-white/90 active:bg-white/5" onClick={closeMobileMenu}>DIGITAL</a>
-            <a href="#contact" className="border border-white/10 p-4 font-display text-[0.8rem] uppercase tracking-[0.18em] text-white/90 active:bg-white/5" onClick={closeMobileMenu}>CONTACT</a>
-            {user && !loading ? (
-              <Link to="/profile" className="border border-white/10 p-4 font-display text-[0.8rem] uppercase tracking-[0.18em] text-white/90 active:bg-white/5" onClick={closeMobileMenu}>
-                PROFILE ({firstName.toUpperCase()})
-              </Link>
-            ) : (
-              <Link to="/sign-in" className="border border-white/10 p-4 font-display text-[0.8rem] uppercase tracking-[0.18em] text-white/90 active:bg-white/5" onClick={closeMobileMenu}>
-                SIGN IN
-              </Link>
-            )}
-          </div>
-        </div>
-      </header>
+      <SiteHeader isHome onMobileMenuChange={setIsHeaderMobileMenuOpen} />
 
       <main>
         <section id="home" className="relative isolate min-h-[calc(100vh-73px)] overflow-hidden border-b border-white/15">
@@ -768,9 +950,9 @@ function App() {
                   />
                 </div>
 
-                <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center">
-                  <label className="field-wrap">
-                    <span>Zoom</span>
+                <div className="mt-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between rounded-sm border border-white/10 bg-white/[0.02] p-4">
+                  <div className="flex w-full max-w-sm items-center gap-4">
+                    <span className="display-font text-[11px] tracking-widest text-white/60">ZOOM</span>
                     <input
                       type="range"
                       min={1}
@@ -778,11 +960,12 @@ function App() {
                       step={0.01}
                       value={zoom}
                       onChange={(event) => setZoom(Number(event.target.value))}
+                      className="w-full cursor-pointer accent-white"
                     />
-                  </label>
+                  </div>
                   <button
                     type="button"
-                    className="action-btn action-btn-solid justify-center"
+                    className="action-btn action-btn-solid w-full shrink-0 justify-center sm:w-auto sm:px-8"
                     onClick={handleConfirmCroppedUpload}
                     disabled={savingBannerConfig || uploadingBannerFile || !croppedAreaPixels}
                   >
@@ -792,6 +975,75 @@ function App() {
               </div>
             </div>
           ) : null}
+
+          {isAdmin && showServiceCropModal && pendingServicePreviewUrl
+            ? createPortal(
+                <div
+                  className="fixed inset-x-0 bottom-0 top-[73px] z-[125] bg-black/80 p-4 backdrop-blur-sm sm:p-6"
+                  onClick={closeServiceCropModal}
+                >
+                  <div
+                    className="mx-auto flex h-full w-full max-w-4xl flex-col rounded-sm border border-white/20 bg-black/90 p-4 sm:p-6"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <div className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-4">
+                      <div>
+                        <p className="display-font text-sm uppercase tracking-[0.2em] text-white">Adjust Service Image</p>
+                        <p className="mt-1 text-xs text-white/60">
+                          Drag and zoom to format. The illuminated area is exactly what will show on the card (16:10 format).
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-sm border border-white/25 bg-black/55 text-white transition hover:border-white/70 hover:bg-black/80"
+                        onClick={closeServiceCropModal}
+                        title="Close"
+                        aria-label="Close service crop modal"
+                      >
+                        <FiX size={16} />
+                      </button>
+                    </div>
+
+                    <div className="relative min-h-0 flex-1 overflow-hidden rounded-sm border border-white/20 bg-black/70">
+                      <Cropper
+                        image={pendingServicePreviewUrl}
+                        crop={serviceCrop}
+                        zoom={serviceZoom}
+                        aspect={16 / 10}
+                        onCropChange={setServiceCrop}
+                        onZoomChange={setServiceZoom}
+                        onCropComplete={(_croppedArea, pixels) => setServiceCroppedAreaPixels(pixels)}
+                        showGrid
+                      />
+                    </div>
+
+                    <div className="mt-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between rounded-sm border border-white/10 bg-white/[0.02] p-4">
+                      <div className="flex w-full max-w-sm items-center gap-4">
+                        <span className="display-font text-[11px] tracking-widest text-white/60">ZOOM</span>
+                        <input
+                          type="range"
+                          min={1}
+                          max={3}
+                          step={0.01}
+                          value={serviceZoom}
+                          onChange={(event) => setServiceZoom(Number(event.target.value))}
+                          className="w-full cursor-pointer accent-white"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        className="action-btn action-btn-solid w-full shrink-0 justify-center sm:w-auto sm:px-8"
+                        onClick={handleConfirmServiceCroppedUpload}
+                        disabled={savingServiceImageKey === pendingServiceKey || !serviceCroppedAreaPixels}
+                      >
+                        {savingServiceImageKey === pendingServiceKey ? 'Uploading...' : 'Confirm and Upload'}
+                      </button>
+                    </div>
+                  </div>
+                </div>,
+                document.body,
+              )
+            : null}
 
           {isAdmin && previewBannerUrl
             ? createPortal(
@@ -814,7 +1066,15 @@ function App() {
                   >
                     <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
                       <p className="truncate text-sm uppercase tracking-[0.12em] text-white/75">{previewBannerName || 'Preview'}</p>
-                      <span className="inline-flex h-9 w-9" aria-hidden="true" />
+                      <button
+                        type="button"
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-sm border border-white/35 bg-black/65 text-white transition hover:border-white/80 hover:bg-black/90"
+                        onClick={closeBannerPreview}
+                        aria-label="Close image preview"
+                        title="Close"
+                      >
+                        <FiX size={16} />
+                      </button>
                     </div>
                     <div className="max-h-[calc(100dvh-170px)] overflow-auto p-4">
                       <img
@@ -822,6 +1082,55 @@ function App() {
                         alt={previewBannerName || 'Banner preview'}
                         className="mx-auto block h-auto max-h-[calc(100dvh-210px)] w-full object-contain"
                       />
+                    </div>
+                  </div>
+                </div>,
+                document.body,
+              )
+            : null}
+
+          {isAdmin && showHeroTextEditor
+            ? createPortal(
+                <div
+                  className="fixed inset-x-0 bottom-0 top-[73px] z-[125] bg-black/80 p-4 backdrop-blur-sm sm:p-6"
+                  onClick={() => setShowHeroTextEditor(false)}
+                >
+                  <div
+                    className="mx-auto w-full max-w-3xl rounded-sm border border-white/20 bg-black/90 p-4"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <p className="display-font text-xs tracking-[0.2em] text-white/70">EDIT HERO PARAGRAPH</p>
+                      <button
+                        type="button"
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-sm border border-white/25 bg-black/55 text-white transition hover:border-white/70 hover:bg-black/80"
+                        onClick={() => setShowHeroTextEditor(false)}
+                        aria-label="Close text editor"
+                        title="Close"
+                      >
+                        <FiX size={16} />
+                      </button>
+                    </div>
+
+                    <label className="field-wrap">
+                      <span>Hero paragraph</span>
+                      <textarea
+                        rows={7}
+                        value={heroIntroInput}
+                        onChange={(event) => setHeroIntroInput(event.target.value)}
+                        placeholder="Write hero intro text"
+                      />
+                    </label>
+
+                    <div className="mt-3 flex justify-end">
+                      <button
+                        type="button"
+                        className="action-btn action-btn-outline"
+                        onClick={handleSaveHeroIntro}
+                        disabled={savingHeroIntro}
+                      >
+                        {savingHeroIntro ? 'Saving...' : 'Save Hero Text'}
+                      </button>
                     </div>
                   </div>
                 </div>,
@@ -847,9 +1156,25 @@ function App() {
               <h1 className="display-font mt-4 text-balance text-5xl uppercase leading-[0.9] tracking-[0.04em] sm:text-7xl lg:text-8xl">
                 Made by Vic
               </h1>
-              <p className="mt-8 max-w-2xl text-pretty text-sm leading-relaxed text-white/75 sm:text-base">
-                Welcome to my Digital Art Gallery, a curated space where creativity, vision, and craftsmanship come together. Each piece is thoughtfully designed to capture emotion, tell a story, and elevate the spaces it lives in. From original artworks to limited edition prints, every creation reflects a commitment to detail, originality, and artistic expression.
-              </p>
+              <div className="mt-8 max-w-2xl">
+                <div className="flex items-start gap-3">
+                  <p className="flex-1 text-pretty text-sm leading-relaxed text-white/75 sm:text-base">{heroIntroText}</p>
+                  {isAdmin ? (
+                    <button
+                      type="button"
+                      className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-sm border border-white/30 bg-black/55 text-white transition hover:border-white/70 hover:bg-black/80"
+                      onClick={() => {
+                        setHeroIntroInput(heroIntroText)
+                        setShowHeroTextEditor(true)
+                      }}
+                      aria-label="Edit hero paragraph"
+                      title="Edit paragraph"
+                    >
+                      <FiEdit2 size={15} />
+                    </button>
+                  ) : null}
+                </div>
+              </div>
               <div className="mt-10 flex flex-wrap gap-4">
                 <a href="#contact" className="action-btn action-btn-solid">
                   Start Your Project
@@ -867,21 +1192,63 @@ function App() {
             Every service is built around your idea, your environment, and your story. The goal is simple: create visual pieces that feel unique, intentional, and unforgettable.
           </SectionIntro>
 
-          <div className="mt-12 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+          {isAdmin ? (
+            <div className="mt-8 rounded-sm border border-white/10 bg-white/[0.02] p-4">
+              <p className="display-font text-[11px] tracking-[0.2em] text-white/65">SERVICE IMAGES ADMIN</p>
+              {serviceAdminError ? <p className="mt-2 text-sm text-red-300">{serviceAdminError}</p> : null}
+              {serviceAdminMessage ? <p className="mt-2 text-sm text-emerald-300">{serviceAdminMessage}</p> : null}
+            </div>
+          ) : null}
+
+          <div className="mt-12 grid auto-rows-fr gap-6 md:grid-cols-2 xl:grid-cols-3">
             {services.map((service, index) => (
               <article
                 key={service.title}
-                className="reveal-card group rounded-sm border border-white/15 bg-white/[0.03] p-6 transition duration-500 hover:border-white/40 hover:bg-white/[0.06]"
+                className="reveal-card group flex h-full flex-col rounded-sm border border-white/15 bg-white/[0.03] p-6 transition duration-500 hover:border-white/40 hover:bg-white/[0.06]"
                 style={{ animationDelay: `${index * 120}ms` }}
               >
-                <p className="display-font text-xs tracking-[0.25em] text-white/50">0{index + 1}</p>
-                <h3 className="display-font mt-4 text-2xl uppercase tracking-[0.06em]">{service.title}</h3>
-                <p className="mt-4 text-sm leading-relaxed text-white/75">{service.description}</p>
-                <div className="mt-6">
-                  <ImagePlaceholder label={`${service.title.toUpperCase()} IMAGE`} ratio="aspect-[16/10]" />
+                <div>
+                  {service.imageUrl ? (
+                    <div className="relative aspect-[16/10] overflow-hidden rounded-sm border border-white/20 bg-black/30">
+                      <img src={service.imageUrl} alt={`${service.title} image`} className="h-full w-full object-cover object-center" />
+                    </div>
+                  ) : (
+                    <ImagePlaceholder label={`${service.title.toUpperCase()} IMAGE`} ratio="aspect-[16/10]" />
+                  )}
                 </div>
+
+                <p className="display-font mt-5 text-xs tracking-[0.25em] text-white/50">0{index + 1}</p>
+                <h3 className="display-font mt-3 text-2xl uppercase tracking-[0.06em]">{service.title}</h3>
+                <p className="mt-4 text-sm leading-relaxed text-white/75 [display:-webkit-box] [-webkit-line-clamp:11] [-webkit-box-orient:vertical] overflow-hidden">
+                  {service.description}
+                </p>
+
+                {isAdmin ? (
+                  <div className="mt-4 flex items-center gap-2">
+                    <label className="action-btn action-btn-outline cursor-pointer">
+                      {savingServiceImageKey === service.key ? 'Saving...' : 'Change Image'}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="sr-only"
+                        onChange={(event) => handleServiceImageUpload(service.key, event)}
+                        disabled={savingServiceImageKey === service.key}
+                      />
+                    </label>
+                  </div>
+                ) : null}
               </article>
             ))}
+          </div>
+
+          <div className="reveal mt-12 flex justify-center">
+            <Link
+              to="/services"
+              className="cta-learn-more group relative inline-flex items-center gap-3 overflow-hidden rounded-full border border-white/30 bg-white px-10 py-4 text-[11px] font-semibold uppercase tracking-[0.28em] text-black transition"
+            >
+              <span className="absolute inset-0 -translate-x-full bg-[linear-gradient(110deg,transparent_0%,rgba(255,255,255,0.7)_45%,transparent_100%)] transition duration-700 group-hover:translate-x-full" />
+              <span className="relative">Learn More</span>
+            </Link>
           </div>
         </section>
 
@@ -912,54 +1279,6 @@ function App() {
               ))}
             </div>
           </div>
-        </section>
-
-        <section className="mx-auto w-full max-w-7xl px-5 py-20 sm:px-7 lg:px-10">
-          <SectionIntro tag="SERVICES" title="My Services">
-            When you work with me, you are not just receiving artwork. You are getting a unique artistic experience. Every piece is created with intention, detail, and purpose. Whether it is a custom mural for your business or an original artwork for your home, I focus on capturing your vision and transforming it into something visually powerful, meaningful, and truly one of a kind.
-          </SectionIntro>
-
-          <div className="mt-12 grid gap-8 lg:grid-cols-3">
-            <article className="reveal-card rounded-sm border border-white/15 bg-black/30 p-6">
-              <h3 className="display-font text-2xl uppercase tracking-[0.07em]">Commissioned Art</h3>
-              <h4 className="mt-5 text-xs uppercase tracking-[0.25em] text-white/55">What Is It?</h4>
-              <p className="mt-3 text-sm leading-relaxed text-white/75">
-                Commissioned art is a custom artwork created specifically for you. Instead of purchasing a pre-made piece, you collaborate directly with the artist to bring your vision to life. From the concept and subject to the style, colors, and size, every detail is tailored to fit your idea and your space.
-              </p>
-              <h4 className="mt-6 text-xs uppercase tracking-[0.25em] text-white/55">Why It Matters</h4>
-              <p className="mt-3 text-sm leading-relaxed text-white/75">
-                Commissioned artwork allows you to own something truly unique. It reflects your personality, your story, or the atmosphere you want to create in your home or business. Because it is made specifically for you, it becomes more than just decoration. It becomes a meaningful piece of art that holds value and personal connection.
-              </p>
-            </article>
-
-            <article className="reveal-card rounded-sm border border-white/15 bg-black/30 p-6 [animation-delay:120ms]">
-              <h3 className="display-font text-2xl uppercase tracking-[0.07em]">Mural Art</h3>
-              <h4 className="mt-5 text-xs uppercase tracking-[0.25em] text-white/55">What Is It?</h4>
-              <p className="mt-3 text-sm leading-relaxed text-white/75">
-                Mural art is large-scale artwork painted directly onto walls or surfaces. Murals transform ordinary spaces into immersive visual experiences, turning blank walls into powerful artistic statements. They can be created for businesses, gyms, restaurants, offices, or private homes.
-              </p>
-              <h4 className="mt-6 text-xs uppercase tracking-[0.25em] text-white/55">Why It Matters</h4>
-              <p className="mt-3 text-sm leading-relaxed text-white/75">
-                Murals bring energy, identity, and personality to a space. For businesses, they help create a memorable environment and strengthen brand presence. For homes or private spaces, they add a bold and artistic atmosphere that cannot be replicated with traditional decor.
-              </p>
-            </article>
-
-            <article className="reveal-card rounded-sm border border-white/15 bg-black/30 p-6 [animation-delay:240ms]">
-              <h3 className="display-font text-2xl uppercase tracking-[0.07em]">Canvas Art</h3>
-              <h4 className="mt-5 text-xs uppercase tracking-[0.25em] text-white/55">What Is It?</h4>
-              <p className="mt-3 text-sm leading-relaxed text-white/75">
-                Canvas art refers to original paintings created on stretched canvas. These artworks can range from small statement pieces to large focal works designed to enhance the aesthetic of a room. Each canvas is hand-painted, making every piece unique.
-              </p>
-              <h4 className="mt-6 text-xs uppercase tracking-[0.25em] text-white/55">Why It Matters</h4>
-              <p className="mt-3 text-sm leading-relaxed text-white/75">
-                Canvas art adds character and artistic depth to a space. Unlike mass-produced prints, original canvas artwork carries the artist touch, creativity, and authenticity. It creates a visual focal point while giving your space a more personal and elevated feel.
-              </p>
-            </article>
-          </div>
-
-          <p className="reveal display-font mt-10 text-center text-sm tracking-[0.28em] text-white/60">
-            Instagram · @_madeby.Vic
-          </p>
         </section>
 
         <section id="digital-design" className="mx-auto w-full max-w-7xl px-5 py-20 sm:px-7 lg:px-10">
