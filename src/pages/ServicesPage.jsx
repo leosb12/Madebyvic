@@ -677,7 +677,7 @@ function ServicesPage() {
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-[#ece9e4] text-[#121212] selection:bg-black selection:text-white">
-      <SiteHeader transparent overlay solidAfterScroll solidScrollThreshold={headerSolidThreshold} />
+      <SiteHeader transparent solidAfterScroll solidScrollThreshold={headerSolidThreshold} />
 
       <main className="pb-16">
         <section ref={heroSectionRef} className="relative h-[42vh] min-h-[300px] w-full overflow-hidden border-b border-black/10 bg-black sm:h-[52vh]">

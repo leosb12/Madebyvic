@@ -434,7 +434,7 @@ function ServiceDetailPage() {
         <section className="mx-auto mt-12 w-full max-w-7xl px-5 sm:px-7 lg:px-10">
           <div className="rounded-sm border border-white/15 bg-white/[0.03] p-7">
             <div className="grid gap-10 xl:grid-cols-[1fr_0.95fr]">
-              <article>
+              <article className="order-2 xl:order-1">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div>
                     <p className="display-font text-xs tracking-[0.34em] text-white/65">SERVICE PAGE</p>
@@ -469,7 +469,7 @@ function ServiceDetailPage() {
                 </div>
               </article>
 
-              <aside>
+              <aside className="order-1 xl:order-2">
                 <p className="display-font text-xs tracking-[0.24em] text-white/60">SERVICE GALLERY</p>
                 <div className="mt-4 rounded-sm border border-white/15 bg-white/[0.03] p-3">
                   <div className="relative aspect-[4/3] overflow-hidden rounded-sm border border-white/15 bg-black/30">

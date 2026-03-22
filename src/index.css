@@ -1,9 +1,10 @@
-@import url('https://fonts.googleapis.com/css2?family=Antonio:wght@400;500;700&family=Manrope:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Antonio:wght@400;500;700&family=Manrope:wght@400;500;600;700&family=Rubik+Spray+Paint&display=swap');
 @import 'tailwindcss';
 
 :root {
 	--display-font: 'Antonio', 'Arial Narrow', sans-serif;
 	--body-font: 'Manrope', 'Segoe UI', sans-serif;
+	--graffiti-font: 'Rubik Spray Paint', 'Impact', fantasy;
 	color-scheme: dark;
 }
 
@@ -875,4 +876,269 @@ summary {
 		justify-content: center;
 		width: 100%;
 	}
+}
+
+.graffiti-loader {
+	position: fixed;
+	inset: 0;
+	z-index: 150;
+	display: grid;
+	place-items: center;
+	padding: 1.5rem;
+	background:
+		radial-gradient(circle at 12% 18%, rgba(255, 255, 255, 0.08), transparent 34%),
+		radial-gradient(circle at 84% 16%, rgba(255, 255, 255, 0.07), transparent 30%),
+		linear-gradient(140deg, #040404 0%, #0b0b0b 48%, #151515 100%);
+	overflow: hidden;
+}
+
+.graffiti-loader__noise,
+.graffiti-loader__paint {
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+}
+
+.graffiti-loader__noise {
+	background-image:
+		radial-gradient(circle, rgba(255, 255, 255, 0.16) 0.7px, transparent 0.7px),
+		radial-gradient(circle, rgba(255, 255, 255, 0.12) 0.8px, transparent 0.8px);
+	background-size: 40px 40px, 22px 22px;
+	background-position: 0 0, 12px 10px;
+	opacity: 0.22;
+	animation: graffiti-grain 10s linear infinite;
+}
+
+.graffiti-loader__paint {
+	background:
+		radial-gradient(circle at 30% 60%, rgba(255, 255, 255, 0.15), transparent 43%),
+		radial-gradient(circle at 74% 40%, rgba(255, 255, 255, 0.1), transparent 38%);
+	filter: blur(14px);
+	opacity: 0.6;
+	animation: graffiti-cloud 4.6s ease-in-out infinite alternate;
+}
+
+.graffiti-loader__content {
+	position: relative;
+	text-align: center;
+	display: grid;
+	gap: 0.8rem;
+	justify-items: center;
+	max-width: min(90vw, 780px);
+	padding: 2.1rem 1.6rem;
+	border: 1px solid rgba(255, 255, 255, 0.28);
+	background: linear-gradient(145deg, rgba(0, 0, 0, 0.72), rgba(18, 18, 18, 0.5));
+	box-shadow: 0 26px 80px rgba(0, 0, 0, 0.6);
+}
+
+.graffiti-loader__tag {
+	margin: 0;
+	font-family: var(--display-font);
+	font-size: clamp(0.7rem, 1.2vw, 0.85rem);
+	letter-spacing: 0.26em;
+	text-transform: uppercase;
+	color: rgba(255, 255, 255, 0.65);
+	animation: graffiti-fade 1.2s ease-in-out infinite;
+}
+
+.graffiti-loader__wordmark {
+	margin: 0;
+	font-family: var(--graffiti-font);
+	font-size: clamp(2rem, 7vw, 5rem);
+	line-height: 0.95;
+	letter-spacing: 0.05em;
+	text-transform: uppercase;
+	color: transparent;
+	-webkit-text-stroke: 1.2px rgba(255, 255, 255, 0.92);
+	background: linear-gradient(90deg, #ffffff 0%, #ffffff 55%, transparent 55%);
+	background-repeat: no-repeat;
+	background-size: 0% 100%;
+	-webkit-background-clip: text;
+	background-clip: text;
+	animation: graffiti-write 2.9s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
+	white-space: nowrap;
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: clip;
+	padding-inline: 0.4rem;
+}
+
+.graffiti-loader__inkline {
+	width: min(80%, 430px);
+	height: 3px;
+	background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.95), transparent);
+	position: relative;
+	overflow: hidden;
+}
+
+.graffiti-loader__inkline::after {
+	content: '';
+	position: absolute;
+	left: -25%;
+	top: 0;
+	width: 25%;
+	height: 100%;
+	background: #fff;
+	filter: blur(1px);
+	animation: graffiti-scan 1.8s ease-in-out infinite;
+}
+
+@keyframes graffiti-write {
+	0% {
+		background-size: 0% 100%;
+	}
+	58% {
+		background-size: 100% 100%;
+	}
+	76% {
+		background-size: 100% 100%;
+	}
+	100% {
+		background-size: 0% 100%;
+	}
+}
+
+@keyframes graffiti-scan {
+	0% {
+		left: -30%;
+		opacity: 0;
+	}
+	15% {
+		opacity: 1;
+	}
+	70% {
+		opacity: 1;
+	}
+	100% {
+		left: 110%;
+		opacity: 0;
+	}
+}
+
+@keyframes graffiti-grain {
+	from {
+		transform: translate3d(0, 0, 0);
+	}
+	to {
+		transform: translate3d(-14px, -10px, 0);
+	}
+}
+
+@keyframes graffiti-cloud {
+	from {
+		transform: scale(1) translateY(0);
+	}
+	to {
+		transform: scale(1.08) translateY(-6px);
+	}
+}
+
+@keyframes graffiti-fade {
+	0%,
+	100% {
+		opacity: 0.5;
+	}
+	50% {
+		opacity: 1;
+	}
+}
+
+@media (max-width: 640px) {
+	.graffiti-loader__content {
+		padding: 1.4rem 1rem;
+	}
+
+	.graffiti-loader__wordmark {
+		white-space: normal;
+		line-height: 1;
+	}
+}
+
+/* Apparel Slider Styles */
+.apparel-slider-container {
+	position: relative;
+	padding: 0.5rem 0;
+	--apparel-slider-progress: 0%;
+}
+
+.apparel-slider {
+	width: 100%;
+	height: 6px;
+	border-radius: 3px;
+	background: linear-gradient(
+		90deg,
+		rgba(255, 255, 255, 0.45) 0%,
+		rgba(255, 255, 255, 0.45) var(--apparel-slider-progress),
+		rgba(255, 255, 255, 0.12) var(--apparel-slider-progress),
+		rgba(255, 255, 255, 0.08) 100%
+	);
+	border: 1px solid rgba(255, 255, 255, 0.15);
+	outline: none;
+	-webkit-appearance: none;
+	appearance: none;
+	cursor: pointer;
+	transition: box-shadow 260ms ease;
+}
+
+.apparel-slider:hover {
+	box-shadow: 0 0 12px rgba(255, 255, 255, 0.25);
+	background: linear-gradient(90deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.12) 100%);
+}
+
+.apparel-slider:focus {
+	outline: none;
+	box-shadow: 0 0 16px rgba(255, 255, 255, 0.35);
+}
+
+/* Webkit Browsers (Chrome, Safari, Edge) */
+.apparel-slider::-webkit-slider-thumb {
+	-webkit-appearance: none;
+	appearance: none;
+	width: 22px;
+	height: 22px;
+	border-radius: 50%;
+	background: linear-gradient(135deg, #ffffff 0%, rgba(255, 255, 255, 0.95) 100%);
+	border: 2px solid rgba(0, 0, 0, 0.25);
+	cursor: grab;
+	box-shadow: 0 4px 12px rgba(255, 255, 255, 0.35);
+	transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+.apparel-slider::-webkit-slider-thumb:hover {
+	transform: scale(1.15);
+	box-shadow: 0 6px 18px rgba(255, 255, 255, 0.45);
+}
+
+.apparel-slider::-webkit-slider-thumb:active {
+	cursor: grabbing;
+	transform: scale(1.08);
+	box-shadow: 0 8px 20px rgba(255, 255, 255, 0.5);
+}
+
+/* Firefox */
+.apparel-slider::-moz-range-thumb {
+	width: 22px;
+	height: 22px;
+	border-radius: 50%;
+	background: linear-gradient(135deg, #ffffff 0%, rgba(255, 255, 255, 0.95) 100%);
+	border: 2px solid rgba(0, 0, 0, 0.25);
+	cursor: grab;
+	box-shadow: 0 4px 12px rgba(255, 255, 255, 0.35);
+	transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+.apparel-slider::-moz-range-thumb:hover {
+	transform: scale(1.15);
+	box-shadow: 0 6px 18px rgba(255, 255, 255, 0.45);
+}
+
+.apparel-slider::-moz-range-thumb:active {
+	cursor: grabbing;
+	transform: scale(1.08);
+	box-shadow: 0 8px 20px rgba(255, 255, 255, 0.5);
+}
+
+.apparel-slider::-moz-range-track {
+	background: transparent;
+	border: none;
 }

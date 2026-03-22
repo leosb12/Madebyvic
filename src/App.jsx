@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import { FiEdit2, FiEye, FiX } from 'react-icons/fi'
 import Cropper from 'react-easy-crop'
 import 'react-easy-crop/react-easy-crop.css'
 import { useAuth } from './context/AuthContext'
+import GraffitiLoader from './components/GraffitiLoader'
 import SiteHeader from './components/SiteHeader'
 import { supabase, supabaseReady } from './lib/supabase'
 
@@ -184,22 +185,74 @@ function App() {
   const [heroIntroInput, setHeroIntroInput] = useState(defaultHeroIntroText)
   const [savingHeroIntro, setSavingHeroIntro] = useState(false)
   const [showHeroTextEditor, setShowHeroTextEditor] = useState(false)
+  const [hasInitialDataLoaded, setHasInitialDataLoaded] = useState(false)
+  const [initialImagesLoaded, setInitialImagesLoaded] = useState(false)
+  const [apparelBlendValue, setApparelBlendValue] = useState(0)
   const bannerFileInputRef = useRef(null)
   const { user, profile } = useAuth()
 
   const isAdmin = profile?.is_admin === true
   const visibleBanners = bannerItems.filter((item) => item.is_active).map((item) => item.image_url)
   const heroBanners = visibleBanners
+  const serviceImageUrls = useMemo(
+    () => Object.values(serviceImagesByKey).map((item) => item?.image_url).filter(Boolean),
+    [serviceImagesByKey],
+  )
   const services = serviceDefinitions.map((service) => ({
     ...service,
     imageUrl: serviceImagesByKey[service.key]?.image_url || '',
   }))
+  const muralGallery = [
+    { key: 'mural-project-01', label: 'MURAL PROJECT 01' },
+    { key: 'mural-project-02', label: 'MURAL PROJECT 02' },
+  ].map((item) => ({
+    ...item,
+    imageUrl: serviceImagesByKey[item.key]?.image_url || '',
+  }))
+  const logoConcepts = [
+    { key: 'logo-concept-a', label: 'LOGO CONCEPT A', ratio: 'aspect-square' },
+    { key: 'logo-concept-b', label: 'LOGO CONCEPT B', ratio: 'aspect-square' },
+  ].map((item) => ({
+    ...item,
+    imageUrl: serviceImagesByKey[item.key]?.image_url || '',
+  }))
+  const apparelMockups = [
+    { key: 'apparel-mockup-01', label: 'Design Image', ratio: 'aspect-square' },
+    { key: 'apparel-mockup-02', label: 'T-Shirt Preview', ratio: 'aspect-square' },
+  ].map((item) => ({
+    ...item,
+    imageUrl: serviceImagesByKey[item.key]?.image_url || '',
+  }))
+  const apparelBlendRatio = apparelBlendValue / 100
+  const activeApparelIndex = apparelBlendRatio >= 0.5 ? 1 : 0
+  const initialAssetUrls = useMemo(
+    () => Array.from(new Set([...heroBanners, ...serviceImageUrls])),
+    [heroBanners, serviceImageUrls],
+  )
+  const isInitialPageReady = hasInitialDataLoaded && initialImagesLoaded
   const totalBannerPages = Math.max(1, Math.ceil(bannerItems.length / bannersPerPage))
   const clampedBannerPage = Math.min(bannerPage, totalBannerPages)
   const pageStart = (clampedBannerPage - 1) * bannersPerPage
   const paginatedBannerItems = bannerItems.slice(pageStart, pageStart + bannersPerPage)
+  const isMuralCrop = pendingServiceKey.startsWith('mural-project-')
+  const isLogoCrop = pendingServiceKey.startsWith('logo-concept-')
+  const isApparelCrop = pendingServiceKey.startsWith('apparel-mockup-')
+  const serviceCropAspect = isLogoCrop || isApparelCrop ? 1 : isMuralCrop ? 4 / 5 : 16 / 10
+  const serviceCropFormatLabel = isLogoCrop || isApparelCrop ? '1:1' : isMuralCrop ? '4:5' : '16:10'
+  const serviceCropTitle = isLogoCrop
+    ? 'Adjust Logo Image'
+    : isMuralCrop
+      ? 'Adjust Mural Image'
+      : isApparelCrop
+        ? 'Adjust Apparel Image'
+        : 'Adjust Service Image'
   const shouldLockPageScroll =
-    isHeaderMobileMenuOpen || showBannerAdmin || showCropModal || showHeroTextEditor || showServiceCropModal
+    !isInitialPageReady ||
+    isHeaderMobileMenuOpen ||
+    showBannerAdmin ||
+    showCropModal ||
+    showHeroTextEditor ||
+    showServiceCropModal
 
   useEffect(() => {
     if (heroBanners.length <= 1) {
@@ -345,8 +398,58 @@ function App() {
   }
 
   useEffect(() => {
-    loadBannerConfig()
+    let isMounted = true
+
+    const initializeHomeData = async () => {
+      await loadBannerConfig()
+      if (isMounted) {
+        setHasInitialDataLoaded(true)
+      }
+    }
+
+    initializeHomeData()
+
+    return () => {
+      isMounted = false
+    }
   }, [])
+
+  useEffect(() => {
+    if (!hasInitialDataLoaded) {
+      return
+    }
+
+    if (initialAssetUrls.length === 0) {
+      setInitialImagesLoaded(true)
+      return
+    }
+
+    let isCancelled = false
+
+    const preloadImage = (url) =>
+      new Promise((resolve) => {
+        const image = new Image()
+        const finish = () => resolve()
+
+        image.onload = finish
+        image.onerror = finish
+        image.src = url
+
+        if (image.complete) {
+          resolve()
+        }
+      })
+
+    Promise.all(initialAssetUrls.map((url) => preloadImage(url))).then(() => {
+      if (!isCancelled) {
+        setInitialImagesLoaded(true)
+      }
+    })
+
+    return () => {
+      isCancelled = true
+    }
+  }, [hasInitialDataLoaded, initialAssetUrls])
 
   const handleBannerFileSelect = (event) => {
     clearBannerFeedback()
@@ -626,6 +729,15 @@ function App() {
       return
     }
 
+    if (serviceKey.startsWith('apparel-mockup-')) {
+      const apparelCount = Object.keys(serviceImagesByKey).filter((k) => k.startsWith('apparel-mockup-')).length
+      if (apparelCount >= 2 && !serviceImagesByKey[serviceKey]) {
+        setServiceAdminError('Apparel Design only allows 2 images maximum.')
+        event.target.value = ''
+        return
+      }
+    }
+
     if (pendingServicePreviewUrl) {
       URL.revokeObjectURL(pendingServicePreviewUrl)
     }
@@ -755,6 +867,7 @@ function App() {
 
   return (
     <div className="relative min-h-screen w-full max-w-[100vw] overflow-x-hidden bg-black text-white selection:bg-white selection:text-black">
+      <GraffitiLoader isVisible={!isInitialPageReady} />
       <div className="pointer-events-none fixed inset-0 -z-10 bg-[radial-gradient(circle_at_10%_10%,rgba(255,255,255,0.18),transparent_32%),radial-gradient(circle_at_86%_18%,rgba(255,255,255,0.13),transparent_30%),radial-gradient(circle_at_50%_90%,rgba(255,255,255,0.11),transparent_32%)]" />
 
       <SiteHeader isHome onMobileMenuChange={setIsHeaderMobileMenuOpen} />
@@ -988,9 +1101,9 @@ function App() {
                   >
                     <div className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-4">
                       <div>
-                        <p className="display-font text-sm uppercase tracking-[0.2em] text-white">Adjust Service Image</p>
+                        <p className="display-font text-sm uppercase tracking-[0.2em] text-white">{serviceCropTitle}</p>
                         <p className="mt-1 text-xs text-white/60">
-                          Drag and zoom to format. The illuminated area is exactly what will show on the card (16:10 format).
+                          Drag and zoom to format. The illuminated area is exactly what will show on the card ({serviceCropFormatLabel} format).
                         </p>
                       </div>
                       <button
@@ -1009,7 +1122,7 @@ function App() {
                         image={pendingServicePreviewUrl}
                         crop={serviceCrop}
                         zoom={serviceZoom}
-                        aspect={16 / 10}
+                        aspect={serviceCropAspect}
                         onCropChange={setServiceCrop}
                         onZoomChange={setServiceZoom}
                         onCropComplete={(_croppedArea, pixels) => setServiceCroppedAreaPixels(pixels)}
@@ -1259,9 +1372,56 @@ function App() {
                 Specializing in large-scale wall art designed to transform spaces and leave a lasting impression. From businesses and gyms to restaurants and private homes, each mural is custom-created to reflect the atmosphere, brand, or story behind the space. Every piece is thoughtfully designed and hand-painted to elevate the environment with powerful visual impact and timeless artistry.
               </SectionIntro>
 
+              {isAdmin ? (
+                <div className="mt-6 rounded-sm border border-white/10 bg-white/[0.02] p-4">
+                  <p className="display-font text-[11px] tracking-[0.2em] text-white/65">MURAL IMAGES ADMIN</p>
+                  {serviceAdminError ? <p className="mt-2 text-sm text-red-300">{serviceAdminError}</p> : null}
+                  {serviceAdminMessage ? <p className="mt-2 text-sm text-emerald-300">{serviceAdminMessage}</p> : null}
+                </div>
+              ) : null}
+
               <div className="mt-8 grid gap-5 sm:grid-cols-2">
-                <ImagePlaceholder label="MURAL PROJECT 01" ratio="aspect-[4/5]" />
-                <ImagePlaceholder label="MURAL PROJECT 02" ratio="aspect-[4/5]" />
+                {muralGallery.map((item) => (
+                  <article
+                    key={item.key}
+                    className="group relative overflow-hidden rounded-sm border border-white/20 bg-black/30"
+                  >
+                    {item.imageUrl ? (
+                      <div className="aspect-[4/5]">
+                        <img
+                          src={item.imageUrl}
+                          alt={`${item.label} image`}
+                          className="h-full w-full object-cover object-center"
+                        />
+                      </div>
+                    ) : (
+                      <ImagePlaceholder label={item.label} ratio="aspect-[4/5]" />
+                    )}
+
+                    {isAdmin ? (
+                      <label className="absolute right-3 top-3 inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-sm border border-white/30 bg-black/55 text-white transition hover:border-white/70 hover:bg-black/80">
+                        <FiEdit2 size={16} />
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="sr-only"
+                          onChange={(event) => handleServiceImageUpload(item.key, event)}
+                          disabled={savingServiceImageKey === item.key}
+                        />
+                      </label>
+                    ) : null}
+                  </article>
+                ))}
+              </div>
+
+              <div className="reveal mt-10 flex justify-center sm:justify-start">
+                <Link
+                  to="/services/mural-art"
+                  className="cta-learn-more group relative inline-flex items-center gap-3 overflow-hidden rounded-full border border-white/30 bg-white px-10 py-4 text-[11px] font-semibold uppercase tracking-[0.28em] text-black transition"
+                >
+                  <span className="absolute inset-0 -translate-x-full bg-[linear-gradient(110deg,transparent_0%,rgba(255,255,255,0.7)_45%,transparent_100%)] transition duration-700 group-hover:translate-x-full" />
+                  <span className="relative">Learn More</span>
+                </Link>
               </div>
             </div>
 
@@ -1286,6 +1446,14 @@ function App() {
             Digital design is more than just graphics. It is about building a recognizable identity. I design custom logos, brand visuals, and apparel graphics that help businesses create a strong and professional presence. Whether it is a logo for a new brand or custom t-shirt designs for merchandise, every design is created to make your brand memorable and visually impactful.
           </SectionIntro>
 
+          {isAdmin ? (
+            <div className="mt-8 rounded-sm border border-white/10 bg-white/[0.02] p-4">
+              <p className="display-font text-[11px] tracking-[0.2em] text-white/65">DIGITAL DESIGN IMAGES ADMIN</p>
+              {serviceAdminError ? <p className="mt-2 text-sm text-red-300">{serviceAdminError}</p> : null}
+              {serviceAdminMessage ? <p className="mt-2 text-sm text-emerald-300">{serviceAdminMessage}</p> : null}
+            </div>
+          ) : null}
+
           <div className="mt-12 grid gap-6 lg:grid-cols-2">
             <article className="reveal-card rounded-sm border border-white/15 bg-white/[0.03] p-7">
               <h3 className="display-font text-3xl uppercase tracking-[0.07em]">Logo Projects</h3>
@@ -1293,8 +1461,33 @@ function App() {
                 Your logo sets the tone for your whole brand and becomes your signature. I design bold, eye-catching logos that tell your story and match your vibe. From clean and minimal to street-inspired and edgy, every logo is made to stand out and represent your brand with style.
               </p>
               <div className="mt-6 grid gap-4 sm:grid-cols-2">
-                <ImagePlaceholder label="LOGO CONCEPT A" ratio="aspect-square" />
-                <ImagePlaceholder label="LOGO CONCEPT B" ratio="aspect-square" />
+                {logoConcepts.map((item) => (
+                  <article
+                    key={item.key}
+                    className="group relative overflow-hidden rounded-sm border border-white/20 bg-black/30"
+                  >
+                    {item.imageUrl ? (
+                      <div className={item.ratio}>
+                        <img src={item.imageUrl} alt={`${item.label} image`} className="h-full w-full object-cover object-center" />
+                      </div>
+                    ) : (
+                      <ImagePlaceholder label={item.label} ratio={item.ratio} />
+                    )}
+
+                    {isAdmin ? (
+                      <label className="absolute right-3 top-3 inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-sm border border-white/30 bg-black/55 text-white transition hover:border-white/70 hover:bg-black/80">
+                        <FiEdit2 size={16} />
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="sr-only"
+                          onChange={(event) => handleServiceImageUpload(item.key, event)}
+                          disabled={savingServiceImageKey === item.key}
+                        />
+                      </label>
+                    ) : null}
+                  </article>
+                ))}
               </div>
             </article>
 
@@ -1303,9 +1496,72 @@ function App() {
               <p className="mt-4 text-sm leading-relaxed text-white/75">
                 Custom apparel designs created to turn clothing into wearable art. From t-shirt graphics to full clothing concepts, each design is crafted with creativity, detail, and originality. Whether you are building a brand, launching merchandise, or looking for a unique design, every piece is made to stand out and represent your vision with style.
               </p>
-              <div className="mt-6 grid gap-4 sm:grid-cols-2">
-                <ImagePlaceholder label="APPAREL MOCKUP 01" ratio="aspect-[4/5]" />
-                <ImagePlaceholder label="APPAREL MOCKUP 02" ratio="aspect-[4/5]" />
+              <div className="mt-6">
+                <div className="relative mx-auto max-w-sm">
+                  <div className="relative aspect-square overflow-hidden rounded-sm border border-white/20 bg-black/30">
+                    {apparelMockups[0]?.imageUrl && apparelMockups[1]?.imageUrl ? (
+                      <>
+                        <img
+                          src={apparelMockups[0].imageUrl}
+                          alt={apparelMockups[0].label}
+                          className="absolute inset-0 h-full w-full object-cover object-center"
+                          style={{ opacity: 1 - apparelBlendRatio }}
+                        />
+                        <img
+                          src={apparelMockups[1].imageUrl}
+                          alt={apparelMockups[1].label}
+                          className="absolute inset-0 h-full w-full object-cover object-center"
+                          style={{
+                            opacity: apparelBlendRatio,
+                            transform: `scale(${1.22 - apparelBlendRatio * 0.22})`,
+                            transformOrigin: 'center',
+                          }}
+                        />
+                      </>
+                    ) : apparelMockups[0]?.imageUrl ? (
+                      <img src={apparelMockups[0].imageUrl} alt={apparelMockups[0].label} className="h-full w-full object-cover object-center" />
+                    ) : apparelMockups[1]?.imageUrl ? (
+                      <img src={apparelMockups[1].imageUrl} alt={apparelMockups[1].label} className="h-full w-full object-cover object-center" />
+                    ) : (
+                      <div className="flex h-full items-center justify-center">
+                        <p className="text-center text-sm text-white/60">Transform your design in a t-shirt</p>
+                      </div>
+                    )}
+                    {isAdmin && apparelMockups[activeApparelIndex] ? (
+                      <label className="absolute right-3 top-3 inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-sm border border-white/30 bg-black/55 text-white transition hover:border-white/70 hover:bg-black/80">
+                        <FiEdit2 size={16} />
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="sr-only"
+                          onChange={(event) => handleServiceImageUpload(apparelMockups[activeApparelIndex].key, event)}
+                          disabled={savingServiceImageKey === apparelMockups[activeApparelIndex].key}
+                        />
+                      </label>
+                    ) : null}
+                  </div>
+                  
+                  {apparelMockups[0]?.imageUrl || apparelMockups[1]?.imageUrl ? (
+                    <div className="mt-6 space-y-3">
+                      <div className="flex items-center justify-between text-xs uppercase tracking-widest text-white/60">
+                        <span>Design</span>
+                        <span>T-Shirt</span>
+                      </div>
+                      <div className="apparel-slider-container" style={{ '--apparel-slider-progress': `${apparelBlendValue}%` }}>
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          step="1"
+                          value={apparelBlendValue}
+                          onChange={(event) => setApparelBlendValue(Number(event.target.value))}
+                          className="apparel-slider w-full"
+                          aria-label="Transform design to t-shirt"
+                        />
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
               </div>
             </article>
           </div>
