@@ -422,13 +422,13 @@ function ServiceDetailPage() {
   const imagesForCards =
     slotImages.length > 0
       ? slotImages
-      : [{ id: 'fallback', image_url: `https://picsum.photos/1200/900?random=${service.slug}` }]
+      : []
 
   const mainImage = imagesForCards[Math.min(selectedImageIndex, Math.max(0, imagesForCards.length - 1))]
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-black text-white selection:bg-white selection:text-black">
-      <SiteHeader />
+      <SiteHeader transparent solidAfterScroll solidScrollThreshold={10} />
 
       <main className="pb-16">
         <section className="mx-auto mt-12 w-full max-w-7xl px-5 sm:px-7 lg:px-10">
@@ -437,7 +437,7 @@ function ServiceDetailPage() {
               <article className="order-2 xl:order-1">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div>
-                    <p className="display-font text-xs tracking-[0.34em] text-white/65">SERVICE PAGE</p>
+                    {/* Removed SERVICE GALLEY label as requested */}
                     <h1 className="display-font mt-3 text-4xl uppercase tracking-[0.05em] sm:text-6xl">{service.title}</h1>
                   </div>
                   {isAdmin ? (
@@ -459,7 +459,7 @@ function ServiceDetailPage() {
                   </p>
                 ))}
 
-                <div className="mt-10 flex justify-center sm:justify-start">
+                <div className="mt-10 flex justify-center">
                   <Link
                     to="/contact"
                     className="inline-flex rounded-full border border-white bg-white px-10 py-4 text-sm font-semibold uppercase tracking-[0.24em] text-black transition hover:scale-[1.03]"
@@ -470,32 +470,34 @@ function ServiceDetailPage() {
               </article>
 
               <aside className="order-1 xl:order-2">
-                <p className="display-font text-xs tracking-[0.24em] text-white/60">SERVICE GALLERY</p>
+                {/* Removed the right-side SERVICE GALLERY label for a cleaner look */}
                 <div className="mt-4 rounded-sm border border-white/15 bg-white/[0.03] p-3">
                   <div className="relative aspect-[4/3] overflow-hidden rounded-sm border border-white/15 bg-black/30">
-                    {mainImage ? (
+                    {mainImage && mainImage.image_url ? (
                       <img src={mainImage.image_url} alt={`${service.title} main showcase`} className="h-full w-full object-cover" />
                     ) : null}
                   </div>
 
-                  <div className="mt-3 grid grid-cols-4 gap-2">
-                    {imagesForCards.map((item, index) => {
-                      const isActive = index === Math.min(selectedImageIndex, Math.max(0, imagesForCards.length - 1))
-                      return (
-                        <button
-                          key={item.id || item.image_url}
-                          type="button"
-                          className={`relative overflow-hidden rounded-sm border transition ${
-                            isActive ? 'border-white' : 'border-white/20 hover:border-white/60'
-                          }`}
-                          onClick={() => setSelectedImageIndex(index)}
-                          aria-label={`Show image ${index + 1}`}
-                        >
-                          <img src={item.image_url} alt={`${service.title} thumbnail ${index + 1}`} className="aspect-[4/3] w-full object-cover" />
-                        </button>
-                      )
-                    })}
-                  </div>
+                  {imagesForCards.length > 0 ? (
+                    <div className="mt-3 grid grid-cols-4 gap-2">
+                      {imagesForCards.map((item, index) => {
+                        const isActive = index === Math.min(selectedImageIndex, Math.max(0, imagesForCards.length - 1))
+                        return (
+                          <button
+                            key={item.id || item.image_url}
+                            type="button"
+                            className={`relative overflow-hidden rounded-sm border transition ${
+                              isActive ? 'border-white' : 'border-white/20 hover:border-white/60'
+                            }`}
+                            onClick={() => setSelectedImageIndex(index)}
+                            aria-label={`Show image ${index + 1}`}
+                          >
+                            <img src={item.image_url} alt={`${service.title} thumbnail ${index + 1}`} className="aspect-[4/3] w-full object-cover" />
+                          </button>
+                        )
+                      })}
+                    </div>
+                  ) : null}
                 </div>
               </aside>
             </div>
@@ -542,27 +544,10 @@ function ServiceDetailPage() {
               {adminError ? <p className="mb-3 text-sm text-red-300">{adminError}</p> : null}
               {adminMessage ? <p className="mb-3 text-sm text-emerald-300">{adminMessage}</p> : null}
 
-              <div className="grid gap-2 sm:grid-cols-[1fr_auto] sm:items-end">
-                <label className="field-wrap">
-                  <span>Speed (seconds)</span>
-                  <input
-                    type="number"
-                    min="1.2"
-                    max="30"
-                    step="0.1"
-                    value={speedInput}
-                    onChange={(event) => setSpeedInput(event.target.value)}
-                  />
-                </label>
-                <button type="button" className="action-btn action-btn-outline justify-center" onClick={handleSaveSpeed} disabled={isSaving}>
-                  Save Speed
-                </button>
-              </div>
-
               <div className="mt-3 flex items-center justify-between gap-3">
                 <p className="text-xs uppercase tracking-[0.18em] text-white/60">Images ({slotImages.length})</p>
                 <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-white/35 bg-white px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-black transition hover:border-white hover:bg-white/90">
-                  {isSaving ? 'Saving...' : '+ Change'}
+                  {isSaving ? 'Saving...' : 'Add Img'}
                   <input type="file" accept="image/*" className="sr-only" onChange={openCropModal} disabled={isSaving} />
                 </label>
               </div>
@@ -613,7 +598,7 @@ function ServiceDetailPage() {
                   image={pendingPreviewUrl}
                   crop={crop}
                   zoom={zoom}
-                  aspect={service.aspect}
+                  aspect={4 / 3}
                   onCropChange={setCrop}
                   onZoomChange={setZoom}
                   onCropComplete={(_area, pixels) => setCroppedAreaPixels(pixels)}

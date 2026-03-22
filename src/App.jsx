@@ -1414,7 +1414,7 @@ function App() {
                 ))}
               </div>
 
-              <div className="reveal mt-10 flex justify-center sm:justify-start">
+              <div className="reveal mt-10 flex justify-center">
                 <Link
                   to="/services/mural-art"
                   className="cta-learn-more group relative inline-flex items-center gap-3 overflow-hidden rounded-full border border-white/30 bg-white px-10 py-4 text-[11px] font-semibold uppercase tracking-[0.28em] text-black transition"
@@ -1455,7 +1455,7 @@ function App() {
           ) : null}
 
           <div className="mt-12 grid gap-6 lg:grid-cols-2">
-            <article className="reveal-card rounded-sm border border-white/15 bg-white/[0.03] p-7">
+            <article className="reveal-card flex h-full flex-col rounded-sm border border-white/15 bg-white/[0.03] p-7">
               <h3 className="display-font text-3xl uppercase tracking-[0.07em]">Logo Projects</h3>
               <p className="mt-4 text-sm leading-relaxed text-white/75">
                 Your logo sets the tone for your whole brand and becomes your signature. I design bold, eye-catching logos that tell your story and match your vibe. From clean and minimal to street-inspired and edgy, every logo is made to stand out and represent your brand with style.
@@ -1464,7 +1464,7 @@ function App() {
                 {logoConcepts.map((item) => (
                   <article
                     key={item.key}
-                    className="group relative overflow-hidden rounded-sm border border-white/20 bg-black/30"
+                    className="group relative overflow-hidden rounded-sm bg-black/30"
                   >
                     {item.imageUrl ? (
                       <div className={item.ratio}>
@@ -1489,16 +1489,39 @@ function App() {
                   </article>
                 ))}
               </div>
+
+              <div className="mt-6 rounded-sm border border-white/15 bg-white/[0.02] p-4">
+                <p className="display-font text-[11px] uppercase tracking-[0.22em] text-white/60">Brand Kit Includes</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <span className="rounded-full border border-white/20 bg-black/35 px-3 py-1 text-[10px] uppercase tracking-[0.16em] text-white/75">Primary Logo</span>
+                  <span className="rounded-full border border-white/20 bg-black/35 px-3 py-1 text-[10px] uppercase tracking-[0.16em] text-white/75">Secondary Mark</span>
+                  <span className="rounded-full border border-white/20 bg-black/35 px-3 py-1 text-[10px] uppercase tracking-[0.16em] text-white/75">Icon Variant</span>
+                  <span className="rounded-full border border-white/20 bg-black/35 px-3 py-1 text-[10px] uppercase tracking-[0.16em] text-white/75">Social Avatar</span>
+                </div>
+                <p className="mt-3 text-xs leading-relaxed text-white/60">
+                  Every logo project is designed as a full visual system so your brand looks strong and consistent everywhere.
+                </p>
+              </div>
+
+              <div className="mt-8 flex justify-center lg:mt-auto lg:pt-6">
+                <Link
+                  to="/services/logo-design"
+                  className="cta-learn-more group relative inline-flex items-center gap-3 overflow-hidden rounded-full border border-white/30 bg-white px-10 py-4 text-[11px] font-semibold uppercase tracking-[0.28em] text-black transition"
+                >
+                  <span className="absolute inset-0 -translate-x-full bg-[linear-gradient(110deg,transparent_0%,rgba(255,255,255,0.7)_45%,transparent_100%)] transition duration-700 group-hover:translate-x-full" />
+                  <span className="relative">Learn More</span>
+                </Link>
+              </div>
             </article>
 
-            <article className="reveal-card rounded-sm border border-white/15 bg-white/[0.03] p-7 [animation-delay:120ms]">
+            <article className="reveal-card flex h-full flex-col rounded-sm border border-white/15 bg-white/[0.03] p-7 [animation-delay:120ms]">
               <h3 className="display-font text-3xl uppercase tracking-[0.07em]">Apparel Design</h3>
               <p className="mt-4 text-sm leading-relaxed text-white/75">
                 Custom apparel designs created to turn clothing into wearable art. From t-shirt graphics to full clothing concepts, each design is crafted with creativity, detail, and originality. Whether you are building a brand, launching merchandise, or looking for a unique design, every piece is made to stand out and represent your vision with style.
               </p>
               <div className="mt-6">
                 <div className="relative mx-auto max-w-sm">
-                  <div className="relative aspect-square overflow-hidden rounded-sm border border-white/20 bg-black/30">
+                  <div className="relative aspect-square overflow-hidden rounded-sm bg-black/30">
                     {apparelMockups[0]?.imageUrl && apparelMockups[1]?.imageUrl ? (
                       <>
                         <img
@@ -1562,6 +1585,16 @@ function App() {
                     </div>
                   ) : null}
                 </div>
+              </div>
+
+              <div className="mt-8 flex justify-center lg:mt-auto lg:pt-6">
+                <Link
+                  to="/services/apparel-design"
+                  className="cta-learn-more group relative inline-flex items-center gap-3 overflow-hidden rounded-full border border-white/30 bg-white px-10 py-4 text-[11px] font-semibold uppercase tracking-[0.28em] text-black transition"
+                >
+                  <span className="absolute inset-0 -translate-x-full bg-[linear-gradient(110deg,transparent_0%,rgba(255,255,255,0.7)_45%,transparent_100%)] transition duration-700 group-hover:translate-x-full" />
+                  <span className="relative">Learn More</span>
+                </Link>
               </div>
             </article>
           </div>

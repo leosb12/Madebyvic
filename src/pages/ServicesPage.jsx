@@ -680,32 +680,36 @@ function ServicesPage() {
       <SiteHeader transparent solidAfterScroll solidScrollThreshold={headerSolidThreshold} />
 
       <main className="pb-16">
-        <section ref={heroSectionRef} className="relative h-[42vh] min-h-[300px] w-full overflow-hidden border-b border-black/10 bg-black sm:h-[52vh]">
-          {heroItems.map((item, index) => (
-            <img
-              key={item.id || item.image_url}
-              src={item.image_url}
-              alt="Services hero"
-              className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-[1300ms] ease-in-out ${
-                index === heroActiveIndex ? 'opacity-100' : 'opacity-0'
-              }`}
-            />
-          ))}
-          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.25),rgba(0,0,0,0.45))]" />
-          <div className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-7xl px-5 pb-8 sm:px-7 lg:px-10">
-            <p className="display-font text-sm tracking-[0.34em] text-white/90">SERVICES</p>
-          </div>
-
-          {isAdmin ? (
-            <button
-              type="button"
-              className="absolute right-4 top-24 z-[70] inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/60 bg-black/65 text-white transition hover:border-white hover:bg-black/85 sm:top-28"
-              onClick={() => openSlotEditor('services-hero')}
-              aria-label="Edit services hero carousel"
-            >
-              <FiEdit2 size={15} />
-            </button>
-          ) : null}
+          <section ref={heroSectionRef} className="relative h-[42vh] min-h-[300px] w-full overflow-hidden border-b border-black/10 sm:h-[52vh]">
+            {/* Hero image absolutely positioned under the header for true overlay */}
+            <div className="absolute inset-0 z-0">
+              {heroItems.map((item, index) => (
+                <img
+                  key={item.id || item.image_url}
+                  src={item.image_url}
+                  alt="Services hero"
+                  className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-[1300ms] ease-in-out ${
+                    index === heroActiveIndex ? 'opacity-100' : 'opacity-0'
+                  }`}
+                />
+              ))}
+              <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.25),rgba(0,0,0,0.45))]" />
+            </div>
+            <div className="relative z-10 h-full w-full">
+              <div className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-7xl px-5 pb-8 sm:px-7 lg:px-10">
+                <p className="display-font text-sm tracking-[0.34em] text-white/90">SERVICES</p>
+              </div>
+              {isAdmin ? (
+                <button
+                  type="button"
+                  className="absolute right-4 top-24 z-[70] inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/60 bg-black/65 text-white transition hover:border-white hover:bg-black/85 sm:top-28"
+                  onClick={() => openSlotEditor('services-hero')}
+                  aria-label="Edit services hero carousel"
+                >
+                  <FiEdit2 size={15} />
+                </button>
+              ) : null}
+            </div>
         </section>
 
         <section className="mx-auto w-full max-w-7xl px-5 pt-12 sm:px-7 sm:pt-14 lg:px-10">

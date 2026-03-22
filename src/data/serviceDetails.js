@@ -1,5 +1,31 @@
 export const serviceDetails = [
   {
+    slug: 'logo-design',
+    title: 'Logo Design',
+    slotKey: 'services-card-logo-design',
+    aspect: 1,
+    intro:
+      'Logo design is the core of your visual identity. This service is built to create memorable marks that feel authentic to your brand and strong across digital, print, and social media.',
+    paragraphs: [
+      'Each logo project starts with brand direction: positioning, tone, audience, and visual references. From there, concepts are developed to ensure your logo is not only beautiful but strategically useful in real-world applications.',
+      'You get a refined logo system that can include primary logo, alternate lockups, icon versions, and usage recommendations. This keeps your brand consistent whether it is on packaging, apparel, signage, or online platforms.',
+      'The final outcome is a logo with clear personality and long-term value, designed to represent your business with confidence and distinction.',
+    ],
+  },
+  {
+    slug: 'apparel-design',
+    title: 'Apparel Design',
+    slotKey: 'services-card-apparel-design',
+    aspect: 1,
+    intro:
+      'Apparel design transforms ideas into wearable statements. This service focuses on creating graphics that work both as art and as fashion-ready pieces for brands, merch drops, and custom collections.',
+    paragraphs: [
+      'Every concept is developed with garment placement, composition, and production in mind. The goal is not just to make a cool graphic, but to make sure it translates cleanly from screen to fabric with real visual impact.',
+      'Design direction can range from bold street-inspired graphics to cleaner brand-focused aesthetics. You can develop single hero pieces or coherent sets that support full launches and product campaigns.',
+      'The final deliverables are crafted to help your apparel stand out, connect with your audience, and look premium in both physical products and online storefronts.',
+    ],
+  },
+  {
     slug: 'commissioned-art',
     title: 'Commissioned Art',
     slotKey: 'services-card-commissioned',
