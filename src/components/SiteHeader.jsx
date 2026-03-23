@@ -14,6 +14,7 @@ function SiteHeader({
   announcement = null,
   announcements = null,
   onAnnouncementDismiss,
+  forceShowMenuButton = false,
 }) {
   const navigate = useNavigate()
   const location = useLocation()
@@ -153,7 +154,7 @@ function SiteHeader({
       window.removeEventListener('resize', updateAnnouncementMetrics)
       window.removeEventListener('scroll', updateAnnouncementMetrics)
     }
-  }, [showAnnouncement])
+  }, [showAnnouncement, activeAnnouncement])
 
   return (
     <>
@@ -230,30 +231,30 @@ function SiteHeader({
 
           <button
             type="button"
-            className="group flex h-11 w-11 shrink-0 flex-col items-center justify-center gap-[6px] rounded-sm border border-white/20 bg-black/60 md:hidden"
+            className="group z-50 mr-1 flex h-11 w-11 shrink-0 flex-col items-center justify-center gap-[6px] rounded-sm border border-white/70 bg-black md:hidden sm:mr-0"
             aria-label={isMobileMenuOpen ? 'Close menu' : 'Open menu'}
             aria-expanded={isMobileMenuOpen}
             aria-controls="mobile-nav"
             onClick={() => setIsMobileMenuOpen((prev) => !prev)}
           >
             <span
-              className={`block h-[1.5px] w-5 origin-center bg-white transition-all duration-300 ${
+              className={`block h-[2.5px] w-[22px] rounded-full origin-center bg-white transition-all duration-300 ${
                 isMobileMenuOpen ? 'translate-y-[7.5px] rotate-45' : ''
               }`}
             />
             <span
-              className={`block h-[1.5px] w-5 bg-white transition-all duration-300 ${
+              className={`block h-[2.5px] w-[22px] rounded-full bg-white transition-all duration-300 ${
                 isMobileMenuOpen ? 'opacity-0' : ''
               }`}
             />
             <span
-              className={`block h-[1.5px] w-5 origin-center bg-white transition-all duration-300 ${
+              className={`block h-[2.5px] w-[22px] rounded-full origin-center bg-white transition-all duration-300 ${
                 isMobileMenuOpen ? '-translate-y-[7.5px] -rotate-45' : ''
               }`}
             />
           </button>
 
-          <div className="hidden items-center gap-7 text-xs tracking-[0.18em] text-white/70 md:flex">
+          <div className={`hidden items-center gap-7 text-xs tracking-[0.18em] text-white/70 ${forceShowMenuButton ? 'lg:flex' : 'md:flex'}`}>
             <Link to="/services" className="story-link">
               SERVICES
             </Link>
@@ -292,9 +293,10 @@ function SiteHeader({
             )}
           </div>
         </nav>
+      </header>
 
-        <div
-          className={`fixed inset-0 z-40 bg-transparent backdrop-blur-0 transition-opacity duration-300 md:hidden ${
+      <div
+        className={`fixed inset-0 z-40 bg-transparent backdrop-blur-0 transition-opacity duration-300 md:hidden ${
             isMobileMenuOpen ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0'
           }`}
           style={{ top: `${mobileMenuTop}px` }}
@@ -367,7 +369,6 @@ function SiteHeader({
             )}
           </div>
         </div>
-      </header>
 
       {!shouldOverlay ? <div aria-hidden="true" className="w-full" style={{ height: `${navOffset}px` }} /> : null}
     </>

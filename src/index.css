@@ -16,6 +16,9 @@ html,
 body,
 #root {
 	min-height: 100%;
+	width: 100%;
+	max-width: 100%;
+	overflow-x: hidden;
 }
 
 html {
@@ -27,6 +30,7 @@ body {
 	background: #070707;
 	color: #fff;
 	font-family: var(--body-font);
+	overscroll-behavior-x: none;
 }
 
 a,

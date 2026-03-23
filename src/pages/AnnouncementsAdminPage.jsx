@@ -55,8 +55,9 @@ const buildNewsletterHtml = (subject, bodyText, imageUrls) => {
 }
 
 function AnnouncementsAdminPage() {
-  const { profile, loading, seeAsAdmin, setSeeAsAdmin } = useAuth()
+  const { user, profile, loading, seeAsAdmin, setSeeAsAdmin } = useAuth()
   const isAdmin = profile?.is_admin === true
+  const waitingForProfile = loading || (Boolean(user) && !profile)
 
   const [announcements, setAnnouncements] = useState([])
   const [form, setForm] = useState(emptyForm)
@@ -560,14 +561,14 @@ function AnnouncementsAdminPage() {
     }
   }
 
-  if (!loading && !isAdmin) {
+  if (!waitingForProfile && !isAdmin) {
     return <Navigate to="/" replace />
   }
 
   return (
-    <div className="min-h-screen bg-black text-white flex flex-col">
-      <SiteHeader />
-      <main className="mx-auto w-full max-w-6xl px-5 py-12 sm:px-7 lg:px-10 flex-1">
+    <div className="min-h-screen w-full bg-black text-white flex flex-col touch-pan-y">
+      <SiteHeader forceShowMenuButton />
+      <main className="mx-auto w-full max-w-6xl overflow-x-hidden px-5 py-12 sm:px-7 lg:px-10 flex-1">
         <section className="mb-8 rounded-sm border border-white/15 bg-white/[0.02] p-5 sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
@@ -589,7 +590,7 @@ function AnnouncementsAdminPage() {
           </div>
         </section>
 
-        <section className="rounded-sm border border-white/15 bg-white/[0.02] p-6 sm:p-8">
+        <section className="rounded-sm border border-white/15 bg-white/[0.02] p-6 sm:p-8 overflow-x-hidden">
           <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-5">
             <div>
               <p className="display-font text-xs tracking-[0.3em] text-white/55">ADMIN ONLY</p>
@@ -674,7 +675,7 @@ function AnnouncementsAdminPage() {
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center justify-end gap-2">
                       <button
                         type="button"
                         className="inline-flex h-9 w-9 items-center justify-center rounded-sm border border-white/25 bg-black/55 text-white transition hover:border-white/70 hover:bg-black/80"
@@ -716,7 +717,7 @@ function AnnouncementsAdminPage() {
           </div>
         </section>
 
-        <section className="mt-8 rounded-sm border border-white/15 bg-white/[0.02] p-6 sm:p-8">
+        <section className="mt-8 rounded-sm border border-white/15 bg-white/[0.02] p-6 sm:p-8 overflow-x-hidden">
           <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-5">
             <div>
               <p className="display-font text-xs tracking-[0.3em] text-white/55">ADMIN ONLY</p>
@@ -801,7 +802,7 @@ function AnnouncementsAdminPage() {
           </form>
         </section>
 
-        <section className="mt-8 rounded-sm border border-white/15 bg-white/[0.02] p-6 sm:p-8">
+        <section className="mt-8 rounded-sm border border-white/15 bg-white/[0.02] p-6 sm:p-8 overflow-x-hidden">
           <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-5">
             <div>
               <p className="display-font text-xs tracking-[0.3em] text-white/55">ADMIN ONLY</p>
@@ -841,7 +842,7 @@ function AnnouncementsAdminPage() {
 
           {!profilesLoading && profiles.length === 0 ? <p className="mt-4 text-sm text-white/55">No profiles found.</p> : null}
 
-          <div className="mt-5 overflow-hidden rounded-sm border border-white/10">
+          <div className="mt-5 overflow-x-auto rounded-sm border border-white/10">
             <div className="hidden grid-cols-[1.2fr_1.2fr_1fr_0.8fr_0.8fr] border-b border-white/10 bg-white/[0.03] px-4 py-3 text-[11px] uppercase tracking-[0.18em] text-white/60 md:grid">
               <span>Email</span>
               <span>Full Name</span>
