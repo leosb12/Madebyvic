@@ -383,6 +383,8 @@ function App() {
   const bannerFileInputRef = useRef(null)
   const reviewsSliderRef = useRef(null)
   const reviewsIsDraggingRef = useRef(false)
+  const reviewsScrollPausedRef = useRef(false)
+  const reviewsScrollTimeoutRef = useRef(null)
   const reviewsDragStartXRef = useRef(0)
   const reviewsStartScrollLeftRef = useRef(0)
   const reviewsAutoDirectionRef = useRef(1)
@@ -1438,6 +1440,14 @@ function App() {
       return
     }
 
+    reviewsScrollPausedRef.current = true
+    if (reviewsScrollTimeoutRef.current) {
+      clearTimeout(reviewsScrollTimeoutRef.current)
+    }
+    reviewsScrollTimeoutRef.current = setTimeout(() => {
+      reviewsScrollPausedRef.current = false
+    }, 1500)
+
     const firstCard = reviewsSliderRef.current.querySelector('[data-review-card="true"]')
     const cardWidth = firstCard?.getBoundingClientRect().width || 320
     const amount = Math.max(240, Math.round(cardWidth * 0.9))
@@ -1462,7 +1472,7 @@ function App() {
       const delta = timestamp - lastTimestamp
       lastTimestamp = timestamp
 
-      if (!reviewsIsDraggingRef.current) {
+      if (!reviewsIsDraggingRef.current && !reviewsScrollPausedRef.current) {
         const maxScroll = Math.max(0, slider.scrollWidth - slider.clientWidth)
 
         if (maxScroll > 0) {
