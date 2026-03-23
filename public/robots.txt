@@ -1,0 +1,12 @@
+# robots.txt for Made By Vic
+# Index public marketing pages, keep private/auth/admin paths out of search.
+
+User-agent: *
+Allow: /
+
+Disallow: /admin/
+Disallow: /profile
+Disallow: /sign-in
+
+Sitemap: https://madebyvic.vercel.app/sitemap.xml
+Host: madebyvic.vercel.app
