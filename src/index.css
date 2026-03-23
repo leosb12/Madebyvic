@@ -411,6 +411,58 @@ summary {
 	animation-delay: 100ms;
 }
 
+.service-image-laser-wrap {
+	position: relative;
+	isolation: isolate;
+}
+
+.service-image-worm-svg {
+	position: absolute;
+	left: -7px;
+	top: -7px;
+	width: calc(100% + 14px);
+	height: calc(100% + 14px);
+	pointer-events: none;
+	overflow: visible;
+	z-index: 3;
+}
+
+.service-image-worm-track {
+	fill: none;
+	stroke: rgba(255, 255, 255, 0.24);
+	stroke-width: 0.8;
+}
+
+.service-image-worm-core,
+.service-image-worm-glow {
+	fill: none;
+	stroke-linecap: round;
+	stroke-dasharray: 14 86;
+	stroke-dashoffset: 0;
+	animation: service-border-worm 2.3s linear infinite;
+}
+
+.service-image-worm-core {
+	stroke: rgba(255, 255, 255, 1);
+	stroke-width: 1.7;
+}
+
+.service-image-worm-glow {
+	stroke: rgba(255, 255, 255, 0.58);
+	stroke-width: 3.9;
+	filter: blur(1.35px);
+}
+
+@keyframes service-border-worm {
+	from {
+		stroke-dashoffset: 0;
+	}
+
+	to {
+		stroke-dashoffset: -100;
+	}
+}
+
 @keyframes fade-up {
 	from {
 		opacity: 0;

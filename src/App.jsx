@@ -5,8 +5,8 @@ import { FiEdit2, FiEye, FiX } from 'react-icons/fi'
 import Cropper from 'react-easy-crop'
 import 'react-easy-crop/react-easy-crop.css'
 import { useAuth } from './context/AuthContext'
-import GraffitiLoader from './components/GraffitiLoader'
 import SiteHeader from './components/SiteHeader'
+import SiteFooter from './components/SiteFooter'
 import { supabase, supabaseReady } from './lib/supabase'
 
 const serviceDefinitions = [
@@ -49,8 +49,20 @@ const defaultBannerSpeedMs = 5200
 const heroBucket = (import.meta.env.VITE_SUPABASE_HERO_BUCKET || 'hero-banners').trim()
 const serviceBucket = (import.meta.env.VITE_SUPABASE_SERVICE_BUCKET || 'service-images').trim()
 const bannersPerPage = 3
+const announcementStorageKey = 'madebyvic:dismissed-announcement-id'
+const aboutImageServiceKey = 'about-madebyvic-image'
 const defaultHeroIntroText =
   'Welcome to my Digital Art Gallery, a curated space where creativity, vision, and craftsmanship come together. Each piece is thoughtfully designed to capture emotion, tell a story, and elevate the spaces it lives in. From original artworks to limited edition prints, every creation reflects a commitment to detail, originality, and artistic expression.'
+const defaultAboutTitle = 'Graffiti Energy, Premium Finish'
+const defaultAboutBody =
+  'Madebyvic blends street-art attitude with luxury-level detail. Every project starts with your vision and ends as a visual statement that feels authentic, bold, and memorable.\n\nFrom murals and custom canvas pieces to brand visuals and apparel design, each concept is handcrafted to match your identity, your space, and your story.'
+const instagramProfileUrl = 'https://www.instagram.com/_madeby.vic/'
+const instagramCardSlots = [
+  { key: 'instagram-card-01', label: 'POST 01' },
+  { key: 'instagram-card-02', label: 'POST 02' },
+  { key: 'instagram-card-03', label: 'POST 03' },
+  { key: 'instagram-card-04', label: 'POST 04' },
+]
 
 const buildUniqueFileName = (fileName, existingNames) => {
   const dotIndex = fileName.lastIndexOf('.')
@@ -66,6 +78,77 @@ const buildUniqueFileName = (fileName, existingNames) => {
   }
 
   return candidate
+}
+
+const normalizeExternalUrl = (value) => {
+  const nextValue = String(value || '').trim()
+  if (!nextValue) {
+    return ''
+  }
+
+  if (/^https?:\/\//i.test(nextValue)) {
+    return nextValue
+  }
+
+  return `https://${nextValue}`
+}
+
+const extractInstagramMediaRef = (inputUrl) => {
+  try {
+    const parsed = new URL(inputUrl)
+    const parts = parsed.pathname.split('/').filter(Boolean)
+    const mediaTypeIndex = parts.findIndex((part) => ['p', 'reel', 'tv'].includes(part))
+
+    if (mediaTypeIndex === -1 || !parts[mediaTypeIndex + 1]) {
+      return null
+    }
+
+    return {
+      mediaType: parts[mediaTypeIndex],
+    }
+  } catch {
+    return null
+  }
+}
+
+const buildInstagramImageProxyUrl = (inputUrl) => {
+  const raw = String(inputUrl || '').trim()
+  if (!raw) {
+    return ''
+  }
+
+  try {
+    const parsed = new URL(raw)
+    const targetWithoutProtocol = `${parsed.host}${parsed.pathname}${parsed.search}`
+    return `https://images.weserv.nl/?url=${encodeURIComponent(targetWithoutProtocol)}&w=1600&output=jpg`
+  } catch {
+    return ''
+  }
+}
+
+const resolveInstagramThumbnailUrl = async (postUrl) => {
+  const endpoint = `https://noembed.com/embed?url=${encodeURIComponent(postUrl)}`
+
+  try {
+    const response = await fetch(endpoint)
+
+    if (response.ok) {
+      const payload = await response.json()
+      const thumbnailUrl = String(payload?.thumbnail_url || '').trim()
+      if (thumbnailUrl) {
+        return thumbnailUrl
+      }
+    }
+  } catch {
+    // Fallback below.
+  }
+
+  const mediaRef = extractInstagramMediaRef(postUrl)
+  if (mediaRef) {
+    return `https://www.instagram.com/${mediaRef.mediaType}/${mediaRef.shortcode}/media/?size=l`
+  }
+
+  throw new Error('Could not load instagram metadata.')
 }
 
 const createImage = (url) =>
@@ -185,13 +268,31 @@ function App() {
   const [heroIntroInput, setHeroIntroInput] = useState(defaultHeroIntroText)
   const [savingHeroIntro, setSavingHeroIntro] = useState(false)
   const [showHeroTextEditor, setShowHeroTextEditor] = useState(false)
+  const [aboutTitle, setAboutTitle] = useState(defaultAboutTitle)
+  const [aboutBody, setAboutBody] = useState(defaultAboutBody)
+  const [aboutImageUrl, setAboutImageUrl] = useState('')
+  const [aboutTitleInput, setAboutTitleInput] = useState(defaultAboutTitle)
+  const [aboutBodyInput, setAboutBodyInput] = useState(defaultAboutBody)
+  const [savingAboutContent, setSavingAboutContent] = useState(false)
+  const [showAboutEditor, setShowAboutEditor] = useState(false)
+  const [aboutAdminMessage, setAboutAdminMessage] = useState('')
+  const [aboutAdminError, setAboutAdminError] = useState('')
+  const [instagramLinksByKey, setInstagramLinksByKey] = useState({})
+  const [showInstagramLinkEditor, setShowInstagramLinkEditor] = useState(false)
+  const [editingInstagramKey, setEditingInstagramKey] = useState('')
+  const [instagramLinkInput, setInstagramLinkInput] = useState('')
+  const [savingInstagramLink, setSavingInstagramLink] = useState(false)
+  const [instagramAdminError, setInstagramAdminError] = useState('')
+  const [instagramAdminMessage, setInstagramAdminMessage] = useState('')
+  const [homeAnnouncement, setHomeAnnouncement] = useState(null)
+  const [dismissedAnnouncementId, setDismissedAnnouncementId] = useState('')
   const [hasInitialDataLoaded, setHasInitialDataLoaded] = useState(false)
   const [initialImagesLoaded, setInitialImagesLoaded] = useState(false)
   const [apparelBlendValue, setApparelBlendValue] = useState(0)
   const bannerFileInputRef = useRef(null)
-  const { user, profile } = useAuth()
+  const { user, canEditAsAdmin } = useAuth()
 
-  const isAdmin = profile?.is_admin === true
+  const isAdmin = canEditAsAdmin === true
   const visibleBanners = bannerItems.filter((item) => item.is_active).map((item) => item.image_url)
   const heroBanners = visibleBanners
   const serviceImageUrls = useMemo(
@@ -223,11 +324,18 @@ function App() {
     ...item,
     imageUrl: serviceImagesByKey[item.key]?.image_url || '',
   }))
+  const instagramCards = instagramCardSlots.map((item) => ({
+    ...item,
+    imageUrl: serviceImagesByKey[item.key]?.image_url || '',
+    postUrl: instagramLinksByKey[item.key] || instagramProfileUrl,
+  }))
+  const visibleAnnouncement =
+    homeAnnouncement && String(homeAnnouncement.id) !== dismissedAnnouncementId ? homeAnnouncement : null
   const apparelBlendRatio = apparelBlendValue / 100
   const activeApparelIndex = apparelBlendRatio >= 0.5 ? 1 : 0
   const initialAssetUrls = useMemo(
-    () => Array.from(new Set([...heroBanners, ...serviceImageUrls])),
-    [heroBanners, serviceImageUrls],
+    () => Array.from(new Set([...heroBanners, ...serviceImageUrls, ...(aboutImageUrl ? [aboutImageUrl] : [])])),
+    [heroBanners, serviceImageUrls, aboutImageUrl],
   )
   const isInitialPageReady = hasInitialDataLoaded && initialImagesLoaded
   const totalBannerPages = Math.max(1, Math.ceil(bannerItems.length / bannersPerPage))
@@ -237,22 +345,39 @@ function App() {
   const isMuralCrop = pendingServiceKey.startsWith('mural-project-')
   const isLogoCrop = pendingServiceKey.startsWith('logo-concept-')
   const isApparelCrop = pendingServiceKey.startsWith('apparel-mockup-')
-  const serviceCropAspect = isLogoCrop || isApparelCrop ? 1 : isMuralCrop ? 4 / 5 : 16 / 10
-  const serviceCropFormatLabel = isLogoCrop || isApparelCrop ? '1:1' : isMuralCrop ? '4:5' : '16:10'
+  const isInstagramCrop = pendingServiceKey.startsWith('instagram-card-')
+  const isAboutCrop = pendingServiceKey === aboutImageServiceKey
+  const serviceCropAspect = isAboutCrop ? 3 / 4 : isLogoCrop || isApparelCrop ? 1 : isMuralCrop ? 4 / 5 : isInstagramCrop ? 4 / 3 : 16 / 10
+  const serviceCropFormatLabel = isAboutCrop ? '3:4' : isLogoCrop || isApparelCrop ? '1:1' : isMuralCrop ? '4:5' : isInstagramCrop ? '4:3' : '16:10'
   const serviceCropTitle = isLogoCrop
     ? 'Adjust Logo Image'
     : isMuralCrop
       ? 'Adjust Mural Image'
+      : isInstagramCrop
+        ? 'Adjust Instagram Card'
       : isApparelCrop
         ? 'Adjust Apparel Image'
-        : 'Adjust Service Image'
+        : isAboutCrop
+          ? 'Adjust About Image'
+          : 'Adjust Service Image'
   const shouldLockPageScroll =
     !isInitialPageReady ||
     isHeaderMobileMenuOpen ||
     showBannerAdmin ||
     showCropModal ||
     showHeroTextEditor ||
-    showServiceCropModal
+    showAboutEditor ||
+    showServiceCropModal ||
+    showInstagramLinkEditor
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    const storedId = window.localStorage.getItem(announcementStorageKey) || ''
+    setDismissedAnnouncementId(storedId)
+  }, [])
 
   useEffect(() => {
     if (heroBanners.length <= 1) {
@@ -288,6 +413,8 @@ function App() {
     if (!isAdmin) {
       setShowBannerAdmin(false)
       setShowHeroTextEditor(false)
+      setShowAboutEditor(false)
+      setShowInstagramLinkEditor(false)
     }
   }, [isAdmin])
 
@@ -352,7 +479,7 @@ function App() {
 
     setLoadingBannerConfig(true)
 
-    const [imagesResponse, settingsResponse, introResponse, serviceImagesResponse] = await Promise.all([
+    const [imagesResponse, settingsResponse, introResponse, serviceImagesResponse, aboutResponse, instagramLinksResponse, announcementResponse] = await Promise.all([
       supabase
         .schema('app')
         .from('hero_images')
@@ -366,6 +493,25 @@ function App() {
         .from('service_images')
         .select('id, service_key, image_url')
         .order('created_at', { ascending: false }),
+      supabase
+        .schema('app')
+        .from('about_content')
+        .select('about_title, about_body, image_url')
+        .eq('id', 1)
+        .maybeSingle(),
+      supabase
+        .schema('app')
+        .from('instagram_cards')
+        .select('slot_key, post_url')
+        .order('slot_key', { ascending: true }),
+      supabase
+        .schema('app')
+        .from('site_announcements')
+        .select('id, message, is_active, updated_at')
+        .eq('is_active', true)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
     ])
 
     if (!imagesResponse.error && Array.isArray(imagesResponse.data)) {
@@ -394,7 +540,47 @@ function App() {
       setServiceImagesByKey(nextMap)
     }
 
+    if (!aboutResponse.error && aboutResponse.data) {
+      const nextTitle = String(aboutResponse.data.about_title || defaultAboutTitle)
+      const nextBody = String(aboutResponse.data.about_body || defaultAboutBody)
+      const nextImageUrl = String(aboutResponse.data.image_url || '')
+      setAboutTitle(nextTitle)
+      setAboutBody(nextBody)
+      setAboutTitleInput(nextTitle)
+      setAboutBodyInput(nextBody)
+      setAboutImageUrl(nextImageUrl)
+    }
+
+    if (!instagramLinksResponse?.error && Array.isArray(instagramLinksResponse?.data)) {
+      const nextLinksMap = {}
+      for (const row of instagramLinksResponse.data) {
+        if (row?.slot_key) {
+          nextLinksMap[row.slot_key] = row?.post_url || ''
+        }
+      }
+      setInstagramLinksByKey(nextLinksMap)
+    }
+
+    if (!announcementResponse?.error && announcementResponse?.data?.id) {
+      setHomeAnnouncement({
+        id: announcementResponse.data.id,
+        message: String(announcementResponse.data.message || ''),
+      })
+    } else {
+      setHomeAnnouncement(null)
+    }
+
     setLoadingBannerConfig(false)
+  }
+
+  const handleDismissAnnouncement = (announcement) => {
+    const id = String(announcement?.id || '')
+    if (!id || typeof window === 'undefined') {
+      return
+    }
+
+    setDismissedAnnouncementId(id)
+    window.localStorage.setItem(announcementStorageKey, id)
   }
 
   useEffect(() => {
@@ -697,6 +883,206 @@ function App() {
     setServiceAdminMessage('')
   }
 
+  const clearAboutFeedback = () => {
+    setAboutAdminError('')
+    setAboutAdminMessage('')
+  }
+
+  const clearInstagramFeedback = () => {
+    setInstagramAdminError('')
+    setInstagramAdminMessage('')
+  }
+
+  const openInstagramLinkEditor = (slotKey) => {
+    clearInstagramFeedback()
+    setEditingInstagramKey(slotKey)
+    setInstagramLinkInput(instagramLinksByKey[slotKey] || '')
+    setShowInstagramLinkEditor(true)
+  }
+
+  const handleSaveInstagramLink = async () => {
+    clearInstagramFeedback()
+
+    if (!isAdmin) {
+      setInstagramAdminError('No tienes permisos para editar links de Instagram.')
+      return
+    }
+
+    if (!supabaseReady || !supabase) {
+      setInstagramAdminError('Servicio temporalmente no disponible.')
+      return
+    }
+
+    if (!editingInstagramKey) {
+      setInstagramAdminError('Selecciona una card para actualizar el link.')
+      return
+    }
+
+    const normalizedUrl = normalizeExternalUrl(instagramLinkInput)
+    if (!normalizedUrl) {
+      setInstagramAdminError('El link no puede estar vacio.')
+      return
+    }
+
+    try {
+      const parsed = new URL(normalizedUrl)
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        setInstagramAdminError('El link debe iniciar con http o https.')
+        return
+      }
+    } catch {
+      setInstagramAdminError('Ingresa un link valido para la publicacion.')
+      return
+    }
+
+    setSavingInstagramLink(true)
+
+    const { error } = await supabase
+      .schema('app')
+      .from('instagram_cards')
+      .upsert(
+        {
+          slot_key: editingInstagramKey,
+          post_url: normalizedUrl,
+        },
+        { onConflict: 'slot_key' },
+      )
+
+    if (error) {
+      const permissionDenied = error.message?.toLowerCase().includes('permission denied')
+      const missingTable = error.message?.toLowerCase().includes('does not exist')
+      setInstagramAdminError(
+        permissionDenied
+          ? 'No tienes permisos para actualizar links de Instagram.'
+          : missingTable
+            ? 'Falta la tabla app.instagram_cards en Supabase.'
+            : 'No se pudo guardar el link de la card.',
+      )
+      setSavingInstagramLink(false)
+      return
+    }
+
+    let autoCoverUpdated = false
+
+    try {
+      const thumbnailUrl = await resolveInstagramThumbnailUrl(normalizedUrl)
+      const proxiedThumbnailUrl = buildInstagramImageProxyUrl(thumbnailUrl)
+
+      if (thumbnailUrl) {
+        let finalCoverUrl = proxiedThumbnailUrl || thumbnailUrl
+
+        if (proxiedThumbnailUrl) {
+          try {
+            const proxyResponse = await fetch(proxiedThumbnailUrl)
+            if (proxyResponse.ok) {
+              const proxyBlob = await proxyResponse.blob()
+              const coverPath = `services/${user?.id || 'admin'}/${editingInstagramKey}/instagram-cover-${Date.now()}.jpg`
+              const { error: uploadCoverError } = await supabase.storage.from(serviceBucket).upload(coverPath, proxyBlob, {
+                cacheControl: '3600',
+                upsert: true,
+                contentType: 'image/jpeg',
+              })
+
+              if (!uploadCoverError) {
+                const { data: publicCoverData } = supabase.storage.from(serviceBucket).getPublicUrl(coverPath)
+                if (publicCoverData?.publicUrl) {
+                  finalCoverUrl = publicCoverData.publicUrl
+                }
+              }
+            }
+          } catch {
+            // Keep fallback URL if upload path fails.
+          }
+        }
+
+        const { error: imageError } = await supabase
+          .schema('app')
+          .from('service_images')
+          .upsert(
+            {
+              service_key: editingInstagramKey,
+              image_url: finalCoverUrl,
+            },
+            { onConflict: 'service_key' },
+          )
+
+        if (!imageError) {
+          setServiceImagesByKey((prev) => ({
+            ...prev,
+            [editingInstagramKey]: {
+              ...(prev[editingInstagramKey] || {}),
+              service_key: editingInstagramKey,
+              image_url: finalCoverUrl,
+            },
+          }))
+          autoCoverUpdated = true
+        } else {
+          setInstagramAdminError('Se guardo el link, pero no se pudo guardar la caratula automaticamente.')
+        }
+      }
+    } catch {
+      // Keep link save successful even if cover extraction fails.
+    }
+
+    setInstagramLinksByKey((prev) => ({ ...prev, [editingInstagramKey]: normalizedUrl }))
+    setInstagramAdminMessage(
+      autoCoverUpdated
+        ? 'Instagram card link and cover updated automatically.'
+        : 'Instagram card link updated. If cover was not detected, upload image manually.',
+    )
+    setShowInstagramLinkEditor(false)
+    setEditingInstagramKey('')
+    setInstagramLinkInput('')
+    setSavingInstagramLink(false)
+  }
+
+  const handleSaveAboutContent = async () => {
+    clearAboutFeedback()
+
+    if (!isAdmin) {
+      setAboutAdminError('No tienes permisos para editar About.')
+      return
+    }
+
+    if (!supabaseReady || !supabase) {
+      setAboutAdminError('Servicio temporalmente no disponible.')
+      return
+    }
+
+    const nextTitle = aboutTitleInput.trim()
+    const nextBody = aboutBodyInput.trim()
+
+    if (!nextTitle) {
+      setAboutAdminError('El titulo no puede estar vacio.')
+      return
+    }
+
+    if (!nextBody) {
+      setAboutAdminError('La descripcion no puede estar vacia.')
+      return
+    }
+
+    setSavingAboutContent(true)
+
+    const { error } = await supabase
+      .schema('app')
+      .from('about_content')
+      .upsert({ id: 1, about_title: nextTitle, about_body: nextBody }, { onConflict: 'id' })
+
+    if (error) {
+      const permissionDenied = error.message?.toLowerCase().includes('permission denied')
+      setAboutAdminError(permissionDenied ? 'No tienes permisos para editar About.' : 'No se pudo guardar About.')
+      setSavingAboutContent(false)
+      return
+    }
+
+    setAboutTitle(nextTitle)
+    setAboutBody(nextBody)
+    setShowAboutEditor(false)
+    setAboutAdminMessage('About updated.')
+    setSavingAboutContent(false)
+  }
+
   const closeServiceCropModal = () => {
     if (pendingServicePreviewUrl) {
       URL.revokeObjectURL(pendingServicePreviewUrl)
@@ -755,6 +1141,7 @@ function App() {
 
   const handleConfirmServiceCroppedUpload = async () => {
     clearServiceFeedback()
+    clearAboutFeedback()
 
     if (!isAdmin) {
       setServiceAdminError('No tienes permisos para editar imagenes de servicios.')
@@ -815,24 +1202,43 @@ function App() {
       return
     }
 
-    const existing = serviceImagesByKey[pendingServiceKey]
+    const isAboutImageUpload = pendingServiceKey === aboutImageServiceKey
+    const existing = isAboutImageUpload ? { image_url: aboutImageUrl } : serviceImagesByKey[pendingServiceKey]
     const marker = `/object/public/${serviceBucket}/`
     const idx = existing?.image_url ? existing.image_url.indexOf(marker) : -1
     const oldPath = idx === -1 ? null : existing.image_url.slice(idx + marker.length)
 
-    const payload = {
-      service_key: pendingServiceKey,
-      image_url: imageUrl,
-    }
-
-    const { error: dbError } = await supabase
-      .schema('app')
-      .from('service_images')
-      .upsert(payload, { onConflict: 'service_key' })
+    const { error: dbError } = isAboutImageUpload
+      ? await supabase
+          .schema('app')
+          .from('about_content')
+          .upsert(
+            {
+              id: 1,
+              about_title: aboutTitle || defaultAboutTitle,
+              about_body: aboutBody || defaultAboutBody,
+              image_url: imageUrl,
+            },
+            { onConflict: 'id' },
+          )
+      : await supabase
+          .schema('app')
+          .from('service_images')
+          .upsert(
+            {
+              service_key: pendingServiceKey,
+              image_url: imageUrl,
+            },
+            { onConflict: 'service_key' },
+          )
 
     if (dbError) {
       await supabase.storage.from(serviceBucket).remove([objectPath])
-      setServiceAdminError('No se pudo guardar la imagen del servicio.')
+      if (isAboutImageUpload) {
+        setAboutAdminError('No se pudo guardar la imagen de About.')
+      } else {
+        setServiceAdminError('No se pudo guardar la imagen del servicio.')
+      }
       setSavingServiceImageKey('')
       return
     }
@@ -860,17 +1266,26 @@ function App() {
     }
 
     await loadBannerConfig()
-    setServiceAdminMessage('Service image updated.')
+    if (isAboutImageUpload) {
+      setAboutImageUrl(imageUrl)
+      setAboutAdminMessage('About image updated.')
+    } else {
+      setServiceAdminMessage('Service image updated.')
+    }
     setSavingServiceImageKey('')
     closeServiceCropModal()
   }
 
   return (
     <div className="relative min-h-screen w-full max-w-[100vw] overflow-x-hidden bg-black text-white selection:bg-white selection:text-black">
-      <GraffitiLoader isVisible={!isInitialPageReady} />
       <div className="pointer-events-none fixed inset-0 -z-10 bg-[radial-gradient(circle_at_10%_10%,rgba(255,255,255,0.18),transparent_32%),radial-gradient(circle_at_86%_18%,rgba(255,255,255,0.13),transparent_30%),radial-gradient(circle_at_50%_90%,rgba(255,255,255,0.11),transparent_32%)]" />
 
-      <SiteHeader isHome onMobileMenuChange={setIsHeaderMobileMenuOpen} />
+      <SiteHeader
+        isHome
+        onMobileMenuChange={setIsHeaderMobileMenuOpen}
+        announcement={visibleAnnouncement}
+        onAnnouncementDismiss={handleDismissAnnouncement}
+      />
 
       <main>
         <section id="home" className="relative isolate min-h-[calc(100vh-73px)] overflow-hidden border-b border-white/15">
@@ -1251,6 +1666,116 @@ function App() {
               )
             : null}
 
+          {isAdmin && showInstagramLinkEditor
+            ? createPortal(
+                <div
+                  className="fixed inset-x-0 bottom-0 top-[73px] z-[125] bg-black/80 p-4 backdrop-blur-sm sm:p-6"
+                  onClick={() => setShowInstagramLinkEditor(false)}
+                >
+                  <div
+                    className="mx-auto w-full max-w-2xl rounded-sm border border-white/20 bg-black/90 p-4"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <p className="display-font text-xs tracking-[0.2em] text-white/70">EDIT INSTAGRAM CARD LINK</p>
+                      <button
+                        type="button"
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-sm border border-white/25 bg-black/55 text-white transition hover:border-white/70 hover:bg-black/80"
+                        onClick={() => setShowInstagramLinkEditor(false)}
+                        aria-label="Close instagram link editor"
+                        title="Close"
+                      >
+                        <FiX size={16} />
+                      </button>
+                    </div>
+
+                    <label className="field-wrap">
+                      <span>Publication URL</span>
+                      <input
+                        type="text"
+                        value={instagramLinkInput}
+                        onChange={(event) => setInstagramLinkInput(event.target.value)}
+                        placeholder="https://www.instagram.com/p/..."
+                      />
+                    </label>
+
+                    {instagramAdminError ? <p className="mt-3 text-sm text-red-300">{instagramAdminError}</p> : null}
+
+                    <div className="mt-4 flex justify-end">
+                      <button
+                        type="button"
+                        className="action-btn action-btn-outline"
+                        onClick={handleSaveInstagramLink}
+                        disabled={savingInstagramLink}
+                      >
+                        {savingInstagramLink ? 'Saving...' : 'Save Link'}
+                      </button>
+                    </div>
+                  </div>
+                </div>,
+                document.body,
+              )
+            : null}
+
+          {isAdmin && showAboutEditor
+            ? createPortal(
+                <div
+                  className="fixed inset-x-0 bottom-0 top-[73px] z-[125] bg-black/80 p-4 backdrop-blur-sm sm:p-6"
+                  onClick={() => setShowAboutEditor(false)}
+                >
+                  <div
+                    className="mx-auto w-full max-w-3xl rounded-sm border border-white/20 bg-black/90 p-4"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <p className="display-font text-xs tracking-[0.2em] text-white/70">EDIT ABOUT MADEBYVIC</p>
+                      <button
+                        type="button"
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-sm border border-white/25 bg-black/55 text-white transition hover:border-white/70 hover:bg-black/80"
+                        onClick={() => setShowAboutEditor(false)}
+                        aria-label="Close about editor"
+                        title="Close"
+                      >
+                        <FiX size={16} />
+                      </button>
+                    </div>
+
+                    <label className="field-wrap">
+                      <span>About title</span>
+                      <input
+                        type="text"
+                        value={aboutTitleInput}
+                        onChange={(event) => setAboutTitleInput(event.target.value)}
+                        placeholder="Write About title"
+                      />
+                    </label>
+
+                    <label className="field-wrap mt-3">
+                      <span>About description</span>
+                      <textarea
+                        rows={8}
+                        value={aboutBodyInput}
+                        onChange={(event) => setAboutBodyInput(event.target.value)}
+                        placeholder="Write About description"
+                      />
+                    </label>
+
+                    <div className="mt-3 flex justify-end">
+                      <button
+                        type="button"
+                        className="action-btn action-btn-outline"
+                        onClick={handleSaveAboutContent}
+                        disabled={savingAboutContent}
+                      >
+                        {savingAboutContent ? 'Saving...' : 'Save About'}
+                      </button>
+                    </div>
+                  </div>
+                </div>,
+                document.body,
+              )
+            : null}
+
           {heroBanners.map((banner, index) => (
             <img
               key={banner}
@@ -1322,8 +1847,20 @@ function App() {
               >
                 <div>
                   {service.imageUrl ? (
-                    <div className="relative aspect-[16/10] overflow-hidden rounded-sm border border-white/20 bg-black/30">
-                      <img src={service.imageUrl} alt={`${service.title} image`} className="h-full w-full object-cover object-center" />
+                    <div className="service-image-laser-wrap relative">
+                      <svg
+                        className="service-image-worm-svg"
+                        viewBox="0 0 100 100"
+                        preserveAspectRatio="none"
+                        aria-hidden="true"
+                      >
+                        <rect className="service-image-worm-track" x="2" y="2" width="96" height="96" rx="2" ry="2" />
+                        <rect className="service-image-worm-glow" x="2" y="2" width="96" height="96" rx="2" ry="2" pathLength="100" />
+                        <rect className="service-image-worm-core" x="2" y="2" width="96" height="96" rx="2" ry="2" pathLength="100" />
+                      </svg>
+                      <div className="relative aspect-[16/10] overflow-hidden rounded-sm border border-white/20 bg-black/30">
+                        <img src={service.imageUrl} alt={`${service.title} image`} className="h-full w-full object-cover object-center" />
+                      </div>
                     </div>
                   ) : (
                     <ImagePlaceholder label={`${service.title.toUpperCase()} IMAGE`} ratio="aspect-[16/10]" />
@@ -1600,65 +2137,160 @@ function App() {
           </div>
         </section>
 
-        <section id="contact" className="mx-auto w-full max-w-7xl px-5 pb-24 pt-20 sm:px-7 lg:px-10">
-          <div className="relative overflow-hidden rounded-sm border border-white/20 bg-[linear-gradient(120deg,rgba(255,255,255,0.12),rgba(255,255,255,0.03)_45%,rgba(255,255,255,0.1))] p-8 sm:p-10 lg:p-12">
-            <div className="pointer-events-none absolute inset-0 opacity-20 [background:linear-gradient(90deg,rgba(255,255,255,0.2)_1px,transparent_1px),linear-gradient(180deg,rgba(255,255,255,0.2)_1px,transparent_1px)] bg-[size:32px_32px]" />
+        <section id="instagram" className="mx-auto w-full max-w-7xl px-5 py-20 sm:px-7 lg:px-10">
+          <div className="text-center">
+            <h2 className="display-font text-4xl uppercase tracking-[0.04em] text-white sm:text-5xl lg:text-6xl">Follow me on Instagram</h2>
+            <p className="mt-4 text-sm text-white/65 sm:text-base">
+              Real projects, murals and studio moments. Tap any card to open the publication.
+            </p>
+          </div>
 
-            <div className="relative grid gap-10 lg:grid-cols-[1.1fr_1fr]">
-              <div className="reveal">
-                <p className="display-font text-xs tracking-[0.32em] text-white/65">LET'S CONNECT</p>
-                <h2 className="display-font mt-4 text-balance text-4xl uppercase tracking-[0.05em] sm:text-5xl">
-                  Let's Create Something Unforgettable
-                </h2>
-                <p className="mt-6 max-w-xl text-sm leading-relaxed text-white/80 sm:text-base">
-                  Do you have a question, an idea, or a wall that needs a story? I would love to hear about it. Whether you are interested in a custom painting, mural, apparel design, or a creative collaboration, every project starts with a vision.
-                </p>
-                <p className="mt-4 max-w-xl text-sm leading-relaxed text-white/80 sm:text-base">
-                  Feel free to reach out. There is no pressure or obligation, just a conversation about your ideas and what we can create together.
-                </p>
-                <p className="mt-4 max-w-xl text-sm leading-relaxed text-white/80 sm:text-base">
-                  Fill out the form or send me a direct message, and I will get back to you as soon as possible. I am always open to new ideas and exciting projects.
-                </p>
+          <div className="mt-12 grid grid-cols-2 gap-3 sm:grid-cols-2 sm:gap-5 lg:grid-cols-4">
+            {instagramCards.map((card, index) => {
+              const hasImage = Boolean(card.imageUrl)
+              const hasLink = Boolean(card.postUrl)
+
+              return (
+                <article
+                  key={card.key}
+                  className="reveal-card group relative overflow-hidden rounded-sm border border-white/15 bg-white/[0.03]"
+                  style={{ animationDelay: `${index * 100}ms` }}
+                >
+                  {hasImage ? (
+                    hasLink ? (
+                      <a href={card.postUrl} target="_blank" rel="noopener noreferrer" className="block aspect-[4/3]">
+                        <img src={card.imageUrl} alt={`${card.label} Instagram post`} className="h-full w-full object-cover object-center transition duration-500 group-hover:scale-[1.03]" />
+                      </a>
+                    ) : (
+                      <div className="aspect-[4/3]">
+                        <img src={card.imageUrl} alt={`${card.label} Instagram post`} className="h-full w-full object-cover object-center transition duration-500 group-hover:scale-[1.03]" />
+                      </div>
+                    )
+                  ) : (
+                    <ImagePlaceholder label={card.label} ratio="aspect-[4/3]" />
+                  )}
+
+                  {isAdmin ? (
+                    <div className="absolute right-3 top-3 z-10 flex items-center gap-2">
+                      <label className="inline-flex h-9 cursor-pointer items-center justify-center rounded-sm border border-white/30 bg-black/60 px-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-white transition hover:border-white/70 hover:bg-black/80">
+                        IMG
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="sr-only"
+                          onChange={(event) => handleServiceImageUpload(card.key, event)}
+                          disabled={savingServiceImageKey === card.key}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-sm border border-white/30 bg-black/60 text-white transition hover:border-white/70 hover:bg-black/80"
+                        onClick={() => openInstagramLinkEditor(card.key)}
+                        title="Edit post link"
+                        aria-label={`Edit link for ${card.label}`}
+                      >
+                        <FiEdit2 size={14} />
+                      </button>
+                    </div>
+                  ) : null}
+                </article>
+              )
+            })}
+          </div>
+
+          {isAdmin ? (
+            <div className="mt-6 rounded-sm border border-white/10 bg-white/[0.02] p-4">
+              <p className="display-font text-[11px] tracking-[0.2em] text-white/70">INSTAGRAM CARDS ADMIN</p>
+              <p className="mt-2 text-xs text-white/55">Use IMG to replace the photo and the pencil to edit the publication URL for that card.</p>
+              {instagramAdminError ? <p className="mt-2 text-sm text-red-300">{instagramAdminError}</p> : null}
+              {instagramAdminMessage ? <p className="mt-2 text-sm text-emerald-300">{instagramAdminMessage}</p> : null}
+            </div>
+          ) : null}
+
+          <div className="mt-10 flex justify-center">
+            <a
+              href={instagramProfileUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="cta-learn-more group relative inline-flex items-center gap-3 overflow-hidden rounded-full border border-white/30 bg-white px-10 py-4 text-[11px] font-semibold uppercase tracking-[0.28em] text-black transition"
+            >
+              <span className="absolute inset-0 -translate-x-full bg-[linear-gradient(110deg,transparent_0%,rgba(255,255,255,0.7)_45%,transparent_100%)] transition duration-700 group-hover:translate-x-full" />
+              <span className="relative">My Instagram</span>
+            </a>
+          </div>
+        </section>
+
+        <section id="contact" className="mx-auto w-full max-w-7xl px-5 pb-24 pt-20 sm:px-7 lg:px-10">
+          <div className="relative mb-12 flex items-center gap-4">
+            <div className="h-px flex-1 bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+            <h2 className="display-font text-center text-xs tracking-[0.32em] text-white/50">ABOUT MADEBYVIC</h2>
+            <div className="h-px flex-1 bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+          </div>
+
+          <div className="relative grid gap-12 lg:grid-cols-[1fr_1.1fr] lg:gap-20 items-center">
+            <div className="reveal order-2 lg:order-1 relative">
+              <div className="overflow-hidden bg-black/30 aspect-[3/4]">
+                {aboutImageUrl ? (
+                  <img src={aboutImageUrl} alt="About Madebyvic" className="h-full w-full object-cover object-center grayscale-[50%] transition-all duration-700 hover:grayscale-0" />
+                ) : (
+                  <ImagePlaceholder label="ABOUT IMAGE" ratio="aspect-[3/4]" />
+                )}
               </div>
 
-              <form className="reveal-delay grid gap-4 rounded-sm border border-white/25 bg-black/45 p-6 backdrop-blur-sm sm:p-7">
-                <label className="field-wrap">
-                  <span>Name</span>
-                  <input type="text" name="name" placeholder="Your name" />
-                </label>
-                <label className="field-wrap">
-                  <span>Email</span>
-                  <input type="email" name="email" placeholder="you@email.com" />
-                </label>
-                <label className="field-wrap">
-                  <span>Service</span>
-                  <select name="service" defaultValue="">
-                    <option value="" disabled>
-                      Select one option
-                    </option>
-                    <option>Commissioned Art</option>
-                    <option>Mural Art</option>
-                    <option>Canvas Art</option>
-                    <option>Logo Projects</option>
-                    <option>Apparel Design</option>
-                  </select>
-                </label>
-                <label className="field-wrap">
-                  <span>Project Details</span>
-                  <textarea
-                    name="message"
-                    rows="5"
-                    placeholder="Tell me your idea, style, dimensions, and deadline"
-                  />
-                </label>
-                <button type="button" className="action-btn action-btn-solid mt-2 w-full justify-center">
-                  Send Message
-                </button>
-              </form>
+              {isAdmin ? (
+                <div className="absolute -bottom-4 left-1/2 -translate-x-1/2">
+                  <label className="action-btn action-btn-outline cursor-pointer bg-black/80 backdrop-blur-sm">
+                    {savingServiceImageKey === aboutImageServiceKey ? 'Saving...' : 'Change Image'}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="sr-only"
+                      onChange={(event) => handleServiceImageUpload(aboutImageServiceKey, event)}
+                      disabled={savingServiceImageKey === aboutImageServiceKey}
+                    />
+                  </label>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="reveal-delay order-1 lg:order-2">
+              <div className="flex items-start justify-between gap-4 mb-8">
+                <div>
+                  <h2 className="display-font text-balance text-4xl uppercase tracking-[0.05em] sm:text-5xl lg:text-5xl">{aboutTitle}</h2>
+                </div>
+                {isAdmin ? (
+                  <button
+                    type="button"
+                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-sm border border-white/30 bg-black/55 text-white transition hover:border-white/70 hover:bg-black/80"
+                    onClick={() => {
+                      clearAboutFeedback()
+                      setAboutTitleInput(aboutTitle)
+                      setAboutBodyInput(aboutBody)
+                      setShowAboutEditor(true)
+                    }}
+                    aria-label="Edit about content"
+                    title="Edit about"
+                  >
+                    <FiEdit2 size={15} />
+                  </button>
+                ) : null}
+              </div>
+
+              <div className="space-y-6">
+                {aboutBody.split(/\n\n+/).map((paragraph, index) => (
+                  <p key={`${paragraph.slice(0, 18)}-${index}`} className="text-sm leading-relaxed text-white/80 sm:text-base">
+                    {paragraph}
+                  </p>
+                ))}
+              </div>
+
+              {aboutAdminError ? <p className="mt-4 text-sm text-red-300">{aboutAdminError}</p> : null}
+              {aboutAdminMessage ? <p className="mt-4 text-sm text-emerald-300">{aboutAdminMessage}</p> : null}
             </div>
           </div>
         </section>
       </main>
+      <SiteFooter />
     </div>
   )
 }

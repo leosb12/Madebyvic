@@ -8,7 +8,9 @@ import ProfilePage from './pages/ProfilePage.jsx'
 import ServicesPage from './pages/ServicesPage.jsx'
 import ServiceDetailPage from './pages/ServiceDetailPage.jsx'
 import ContactPage from './pages/ContactPage.jsx'
+import AnnouncementsAdminPage from './pages/AnnouncementsAdminPage.jsx'
 import ScrollToTop from './components/ScrollToTop.jsx'
+import GlobalRouteLoader from './components/GlobalRouteLoader.jsx'
 import { AuthProvider } from './context/AuthContext.jsx'
 
 createRoot(document.getElementById('root')).render(
@@ -16,11 +18,13 @@ createRoot(document.getElementById('root')).render(
     <AuthProvider>
       <BrowserRouter>
         <ScrollToTop />
+        <GlobalRouteLoader />
         <Routes>
           <Route path="/" element={<App />} />
           <Route path="/services" element={<ServicesPage />} />
           <Route path="/services/:slug" element={<ServiceDetailPage />} />
           <Route path="/contact" element={<ContactPage />} />
+          <Route path="/admin/announcements" element={<AnnouncementsAdminPage />} />
           <Route path="/sign-in" element={<AuthPage />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="*" element={<Navigate to="/" replace />} />

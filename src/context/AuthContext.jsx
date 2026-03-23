@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { supabase, supabaseReady } from '../lib/supabase'
 
 const AuthContext = createContext(null)
+const adminViewStorageKeyPrefix = 'mbv:admin-view-enabled:'
 
 const profileFallback = (user) => ({
   email: user?.email ?? '',
@@ -14,6 +15,9 @@ export function AuthProvider({ children }) {
   const [session, setSession] = useState(null)
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [adminViewEnabled, setAdminViewEnabled] = useState(true)
+
+  const isAdmin = profile?.is_admin === true
 
   const fetchProfile = async (user) => {
     if (!user || !supabaseReady || !supabase) {
@@ -79,6 +83,26 @@ export function AuthProvider({ children }) {
     }
   }, [])
 
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    const userId = session?.user?.id
+    if (!userId || !isAdmin) {
+      setAdminViewEnabled(true)
+      return
+    }
+
+    const saved = window.localStorage.getItem(`${adminViewStorageKeyPrefix}${userId}`)
+    if (saved === 'false') {
+      setAdminViewEnabled(false)
+      return
+    }
+
+    setAdminViewEnabled(true)
+  }, [session?.user?.id, isAdmin])
+
   const signOut = async () => {
     if (!supabaseReady || !supabase) {
       return { error: new Error('Supabase is not configured.') }
@@ -93,16 +117,34 @@ export function AuthProvider({ children }) {
     }
   }
 
+  const setSeeAsAdmin = (enabled) => {
+    const nextValue = enabled === true
+
+    if (!isAdmin) {
+      return
+    }
+
+    setAdminViewEnabled(nextValue)
+
+    if (typeof window !== 'undefined' && session?.user?.id) {
+      window.localStorage.setItem(`${adminViewStorageKeyPrefix}${session.user.id}`, String(nextValue))
+    }
+  }
+
   const value = useMemo(
     () => ({
       session,
       user: session?.user ?? null,
       profile,
+      isAdmin,
+      canEditAsAdmin: isAdmin && adminViewEnabled,
+      seeAsAdmin: adminViewEnabled,
+      setSeeAsAdmin,
       loading,
       signOut,
       refreshProfile,
     }),
-    [session, profile, loading],
+    [session, profile, isAdmin, adminViewEnabled, loading],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

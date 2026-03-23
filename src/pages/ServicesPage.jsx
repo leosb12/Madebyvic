@@ -4,6 +4,7 @@ import { FiEdit2, FiX } from 'react-icons/fi'
 import Cropper from 'react-easy-crop'
 import 'react-easy-crop/react-easy-crop.css'
 import SiteHeader from '../components/SiteHeader'
+import SiteFooter from '../components/SiteFooter'
 import { useAuth } from '../context/AuthContext'
 import { supabase, supabaseReady } from '../lib/supabase'
 
@@ -147,8 +148,8 @@ const optimizeBlobForUpload = async (inputBlob, maxBytes) => {
 }
 
 function ServicesPage() {
-  const { user, profile } = useAuth()
-  const isAdmin = profile?.is_admin === true
+  const { user, canEditAsAdmin } = useAuth()
+  const isAdmin = canEditAsAdmin === true
 
   const [imagesBySlot, setImagesBySlot] = useState({})
   const [settingsBySlot, setSettingsBySlot] = useState({})
@@ -170,6 +171,8 @@ function ServicesPage() {
   const [crop, setCrop] = useState({ x: 0, y: 0 })
   const [zoom, setZoom] = useState(1)
   const [croppedAreaPixels, setCroppedAreaPixels] = useState(null)
+  const [routeDataLoaded, setRouteDataLoaded] = useState(false)
+  const [routeImagesReady, setRouteImagesReady] = useState(false)
 
   const slotByKey = useMemo(
     () =>
@@ -213,8 +216,42 @@ function ServicesPage() {
     return items[clampedIndex]?.image_url || items[0].image_url
   }
 
+  const preloadImage = (url) =>
+    new Promise((resolve) => {
+      const image = new Image()
+      const done = () => {
+        image.onload = null
+        image.onerror = null
+        resolve()
+      }
+
+      image.onload = done
+      image.onerror = done
+      image.src = url
+    })
+
+  const routeCriticalImageUrls = useMemo(() => {
+    const urls = []
+
+    for (const slot of editableImageSlots) {
+      for (const row of imagesBySlot[slot.key] || []) {
+        if (row?.image_url) {
+          urls.push(row.image_url)
+        }
+      }
+    }
+
+    return Array.from(new Set(urls))
+  }, [imagesBySlot])
+
+  const isRouteCriticalReady = routeDataLoaded && routeImagesReady
+
   const loadServicesPageImages = async () => {
+    setRouteDataLoaded(false)
+    setRouteImagesReady(false)
+
     if (!supabaseReady || !supabase) {
+      setRouteDataLoaded(true)
       return
     }
 
@@ -232,6 +269,7 @@ function ServicesPage() {
       .select('slot_key, speed_ms')
 
     if (error) {
+      setRouteDataLoaded(true)
       return
     }
 
@@ -260,11 +298,49 @@ function ServicesPage() {
       setSettingsBySlot(nextSettings)
       setSpeedInputsBySlot(nextInputs)
     }
+
+    setRouteDataLoaded(true)
   }
 
   useEffect(() => {
     loadServicesPageImages()
   }, [])
+
+  useEffect(() => {
+    let cancelled = false
+
+    const run = async () => {
+      if (!routeDataLoaded) {
+        if (!cancelled) {
+          setRouteImagesReady(false)
+        }
+        return
+      }
+
+      if (routeCriticalImageUrls.length === 0) {
+        if (!cancelled) {
+          setRouteImagesReady(true)
+        }
+        return
+      }
+
+      if (!cancelled) {
+        setRouteImagesReady(false)
+      }
+
+      await Promise.all(routeCriticalImageUrls.map((url) => preloadImage(url)))
+
+      if (!cancelled) {
+        setRouteImagesReady(true)
+      }
+    }
+
+    run()
+
+    return () => {
+      cancelled = true
+    }
+  }, [routeDataLoaded, routeCriticalImageUrls])
 
   useEffect(() => {
     const updateThreshold = () => {
@@ -676,7 +752,10 @@ function ServicesPage() {
   ]
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-[#ece9e4] text-[#121212] selection:bg-black selection:text-white">
+    <div
+      className="min-h-screen overflow-x-hidden bg-[#ece9e4] text-[#121212] selection:bg-black selection:text-white"
+      data-route-critical-loading={isRouteCriticalReady ? 'false' : 'true'}
+    >
       <SiteHeader transparent solidAfterScroll solidScrollThreshold={headerSolidThreshold} />
 
       <main className="pb-16">
@@ -921,6 +1000,7 @@ function ServicesPage() {
           </div>
         ) : null}
       </main>
+      <SiteFooter />
     </div>
   )
 }
