@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
-import { FiEdit2, FiEye, FiX } from 'react-icons/fi'
+import { FiChevronLeft, FiChevronRight, FiEdit2, FiEye, FiX } from 'react-icons/fi'
 import Cropper from 'react-easy-crop'
 import 'react-easy-crop/react-easy-crop.css'
 import { useAuth } from './context/AuthContext'
@@ -45,11 +45,85 @@ const process = [
   },
 ]
 
+const clientReviews = [
+  {
+    id: 'review-01',
+    name: 'Carla M.',
+    context: 'Owner, Boutique Gym - Miami',
+    service: 'Mural Art',
+    rating: '5/5',
+    date: 'Feb 2026',
+    text: 'We gave him an empty wall and got back a signature piece that changed the energy of the entire gym. Process was clean, fast, and very professional.',
+  },
+  {
+    id: 'review-02',
+    name: 'Daniel R.',
+    context: 'Restaurant Partner - Brickell',
+    service: 'Commissioned Art',
+    rating: '5/5',
+    date: 'Jan 2026',
+    text: 'We needed something elegant with street character. The final piece did exactly that. New guests ask about it almost every night.',
+  },
+  {
+    id: 'review-03',
+    name: 'Sofia T.',
+    context: 'Creative Director - DTC Brand',
+    service: 'Logo + Apparel',
+    rating: '5/5',
+    date: 'Dec 2025',
+    text: 'He did not just design a logo, he built a full visual language for our brand. The merch looked incredible and our first drop sold out in days.',
+  },
+  {
+    id: 'review-04',
+    name: 'Martin V.',
+    context: 'Private Collector - Coral Gables',
+    service: 'Canvas Art',
+    rating: '5/5',
+    date: 'Nov 2025',
+    text: 'I wanted a custom statement piece for my main living room and it exceeded expectations. Strong presence, fine detail, flawless execution.',
+  },
+  {
+    id: 'review-05',
+    name: 'Nadia P.',
+    context: 'Co-Founder, Beauty Studio - Wynwood',
+    service: 'Mural Art',
+    rating: '5/5',
+    date: 'Oct 2025',
+    text: 'Our studio finally feels like a brand, not just a location. The mural became our most photographed corner and helped organic traffic a lot.',
+  },
+  {
+    id: 'review-06',
+    name: 'Julian K.',
+    context: 'Marketing Lead - Hospitality Group',
+    service: 'Commissioned Art',
+    rating: '5/5',
+    date: 'Sep 2025',
+    text: 'Clear communication, strong creative direction, and delivery exactly on schedule. The artwork elevated the full customer experience instantly.',
+  },
+  {
+    id: 'review-07',
+    name: 'Emma L.',
+    context: 'Founder - Activewear Label',
+    service: 'Apparel Design',
+    rating: '5/5',
+    date: 'Aug 2025',
+    text: 'The graphics translated perfectly from concept to fabric. The collection looked premium and authentic, exactly what we wanted for launch.',
+  },
+  {
+    id: 'review-08',
+    name: 'Rafael S.',
+    context: 'Owner, Modern Barbershop - Downtown',
+    service: 'Brand Visuals',
+    rating: '5/5',
+    date: 'Jul 2025',
+    text: 'Every detail felt intentional. The wall art and identity work gave us a distinct look that clients instantly recognize and remember.',
+  },
+]
+
 const defaultBannerSpeedMs = 5200
 const heroBucket = (import.meta.env.VITE_SUPABASE_HERO_BUCKET || 'hero-banners').trim()
 const serviceBucket = (import.meta.env.VITE_SUPABASE_SERVICE_BUCKET || 'service-images').trim()
 const bannersPerPage = 3
-const announcementStorageKey = 'madebyvic:dismissed-announcement-id'
 const aboutImageServiceKey = 'about-madebyvic-image'
 const defaultHeroIntroText =
   'Welcome to my Digital Art Gallery, a curated space where creativity, vision, and craftsmanship come together. Each piece is thoughtfully designed to capture emotion, tell a story, and elevate the spaces it lives in. From original artworks to limited edition prints, every creation reflects a commitment to detail, originality, and artistic expression.'
@@ -157,6 +231,20 @@ const createImage = (url) =>
     image.onload = () => resolve(image)
     image.onerror = reject
     image.src = url
+  })
+
+const preloadImage = (url) =>
+  new Promise((resolve) => {
+    const image = new Image()
+    const finish = () => resolve()
+
+    image.onload = finish
+    image.onerror = finish
+    image.src = url
+
+    if (image.complete) {
+      resolve()
+    }
   })
 
 const getCroppedBlob = async (imageSrc, cropPixels, outputType = 'image/jpeg') => {
@@ -284,12 +372,21 @@ function App() {
   const [savingInstagramLink, setSavingInstagramLink] = useState(false)
   const [instagramAdminError, setInstagramAdminError] = useState('')
   const [instagramAdminMessage, setInstagramAdminMessage] = useState('')
-  const [homeAnnouncement, setHomeAnnouncement] = useState(null)
-  const [dismissedAnnouncementId, setDismissedAnnouncementId] = useState('')
+  const [subscribeEmail, setSubscribeEmail] = useState('')
+  const [subscribing, setSubscribing] = useState(false)
+  const [subscribeError, setSubscribeError] = useState('')
+  const [subscribeMessage, setSubscribeMessage] = useState('')
+  const [homeAnnouncements, setHomeAnnouncements] = useState([])
   const [hasInitialDataLoaded, setHasInitialDataLoaded] = useState(false)
   const [initialImagesLoaded, setInitialImagesLoaded] = useState(false)
   const [apparelBlendValue, setApparelBlendValue] = useState(0)
   const bannerFileInputRef = useRef(null)
+  const reviewsSliderRef = useRef(null)
+  const reviewsIsDraggingRef = useRef(false)
+  const reviewsDragStartXRef = useRef(0)
+  const reviewsStartScrollLeftRef = useRef(0)
+  const reviewsAutoDirectionRef = useRef(1)
+  const lastAutoFilledSubscribeEmailRef = useRef('')
   const { user, canEditAsAdmin } = useAuth()
 
   const isAdmin = canEditAsAdmin === true
@@ -329,14 +426,12 @@ function App() {
     imageUrl: serviceImagesByKey[item.key]?.image_url || '',
     postUrl: instagramLinksByKey[item.key] || instagramProfileUrl,
   }))
-  const visibleAnnouncement =
-    homeAnnouncement && String(homeAnnouncement.id) !== dismissedAnnouncementId ? homeAnnouncement : null
+  const visibleAnnouncements = useMemo(
+    () => (Array.isArray(homeAnnouncements) ? homeAnnouncements.filter((item) => item?.message) : []),
+    [homeAnnouncements],
+  )
   const apparelBlendRatio = apparelBlendValue / 100
   const activeApparelIndex = apparelBlendRatio >= 0.5 ? 1 : 0
-  const initialAssetUrls = useMemo(
-    () => Array.from(new Set([...heroBanners, ...serviceImageUrls, ...(aboutImageUrl ? [aboutImageUrl] : [])])),
-    [heroBanners, serviceImageUrls, aboutImageUrl],
-  )
   const isInitialPageReady = hasInitialDataLoaded && initialImagesLoaded
   const totalBannerPages = Math.max(1, Math.ceil(bannerItems.length / bannersPerPage))
   const clampedBannerPage = Math.min(bannerPage, totalBannerPages)
@@ -369,15 +464,6 @@ function App() {
     showAboutEditor ||
     showServiceCropModal ||
     showInstagramLinkEditor
-
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return
-    }
-
-    const storedId = window.localStorage.getItem(announcementStorageKey) || ''
-    setDismissedAnnouncementId(storedId)
-  }, [])
 
   useEffect(() => {
     if (heroBanners.length <= 1) {
@@ -474,12 +560,12 @@ function App() {
 
   const loadBannerConfig = async () => {
     if (!supabaseReady || !supabase) {
-      return
+      return []
     }
 
     setLoadingBannerConfig(true)
 
-    const [imagesResponse, settingsResponse, introResponse, serviceImagesResponse, aboutResponse, instagramLinksResponse, announcementResponse] = await Promise.all([
+    const [imagesResponse, settingsResponse, introResponse, serviceImagesResponse, aboutResponse, instagramLinksResponse, announcementsResponse] = await Promise.all([
       supabase
         .schema('app')
         .from('hero_images')
@@ -509,13 +595,13 @@ function App() {
         .from('site_announcements')
         .select('id, message, is_active, updated_at')
         .eq('is_active', true)
-        .order('updated_at', { ascending: false })
-        .limit(1)
-        .maybeSingle(),
+        .order('updated_at', { ascending: false }),
     ])
 
-    if (!imagesResponse.error && Array.isArray(imagesResponse.data)) {
-      setBannerItems(imagesResponse.data)
+    const hasBannerRows = !imagesResponse.error && Array.isArray(imagesResponse.data)
+    const nextBannerItems = hasBannerRows ? imagesResponse.data : []
+    if (hasBannerRows) {
+      setBannerItems(nextBannerItems)
     }
 
     if (!settingsResponse.error && settingsResponse.data?.rotation_interval_ms) {
@@ -530,16 +616,17 @@ function App() {
       setHeroIntroInput(intro)
     }
 
+    const nextServiceImagesMap = {}
     if (!serviceImagesResponse.error && Array.isArray(serviceImagesResponse.data)) {
-      const nextMap = {}
       for (const row of serviceImagesResponse.data) {
-        if (row?.service_key && !nextMap[row.service_key]) {
-          nextMap[row.service_key] = row
+        if (row?.service_key && !nextServiceImagesMap[row.service_key]) {
+          nextServiceImagesMap[row.service_key] = row
         }
       }
-      setServiceImagesByKey(nextMap)
+      setServiceImagesByKey(nextServiceImagesMap)
     }
 
+    let nextAboutImageUrl = ''
     if (!aboutResponse.error && aboutResponse.data) {
       const nextTitle = String(aboutResponse.data.about_title || defaultAboutTitle)
       const nextBody = String(aboutResponse.data.about_body || defaultAboutBody)
@@ -549,6 +636,7 @@ function App() {
       setAboutTitleInput(nextTitle)
       setAboutBodyInput(nextBody)
       setAboutImageUrl(nextImageUrl)
+      nextAboutImageUrl = nextImageUrl
     }
 
     if (!instagramLinksResponse?.error && Array.isArray(instagramLinksResponse?.data)) {
@@ -561,36 +649,46 @@ function App() {
       setInstagramLinksByKey(nextLinksMap)
     }
 
-    if (!announcementResponse?.error && announcementResponse?.data?.id) {
-      setHomeAnnouncement({
-        id: announcementResponse.data.id,
-        message: String(announcementResponse.data.message || ''),
-      })
+    if (!announcementsResponse?.error && Array.isArray(announcementsResponse?.data)) {
+      setHomeAnnouncements(
+        announcementsResponse.data
+          .filter((item) => item?.is_active)
+          .map((item) => ({ id: item.id, message: String(item.message || '') })),
+      )
     } else {
-      setHomeAnnouncement(null)
+      setHomeAnnouncements([])
     }
 
     setLoadingBannerConfig(false)
-  }
 
-  const handleDismissAnnouncement = (announcement) => {
-    const id = String(announcement?.id || '')
-    if (!id || typeof window === 'undefined') {
-      return
-    }
+    const nextHeroUrls = nextBannerItems.filter((item) => item?.is_active && item?.image_url).map((item) => item.image_url)
+    const nextServiceUrls = Object.values(nextServiceImagesMap)
+      .map((item) => item?.image_url)
+      .filter(Boolean)
 
-    setDismissedAnnouncementId(id)
-    window.localStorage.setItem(announcementStorageKey, id)
+    return Array.from(new Set([...nextHeroUrls, ...nextServiceUrls, ...(nextAboutImageUrl ? [nextAboutImageUrl] : [])]))
   }
 
   useEffect(() => {
     let isMounted = true
 
     const initializeHomeData = async () => {
-      await loadBannerConfig()
-      if (isMounted) {
-        setHasInitialDataLoaded(true)
+      setInitialImagesLoaded(false)
+
+      const initialUrls = await loadBannerConfig()
+      if (!isMounted) {
+        return
       }
+
+      if (initialUrls.length > 0) {
+        await Promise.all(initialUrls.map((url) => preloadImage(url)))
+        if (!isMounted) {
+          return
+        }
+      }
+
+      setInitialImagesLoaded(true)
+      setHasInitialDataLoaded(true)
     }
 
     initializeHomeData()
@@ -599,43 +697,6 @@ function App() {
       isMounted = false
     }
   }, [])
-
-  useEffect(() => {
-    if (!hasInitialDataLoaded) {
-      return
-    }
-
-    if (initialAssetUrls.length === 0) {
-      setInitialImagesLoaded(true)
-      return
-    }
-
-    let isCancelled = false
-
-    const preloadImage = (url) =>
-      new Promise((resolve) => {
-        const image = new Image()
-        const finish = () => resolve()
-
-        image.onload = finish
-        image.onerror = finish
-        image.src = url
-
-        if (image.complete) {
-          resolve()
-        }
-      })
-
-    Promise.all(initialAssetUrls.map((url) => preloadImage(url))).then(() => {
-      if (!isCancelled) {
-        setInitialImagesLoaded(true)
-      }
-    })
-
-    return () => {
-      isCancelled = true
-    }
-  }, [hasInitialDataLoaded, initialAssetUrls])
 
   const handleBannerFileSelect = (event) => {
     clearBannerFeedback()
@@ -1276,15 +1337,168 @@ function App() {
     closeServiceCropModal()
   }
 
+  const handleReviewsPointerDown = (event) => {
+    if (!reviewsSliderRef.current) {
+      return
+    }
+
+    reviewsIsDraggingRef.current = true
+    reviewsDragStartXRef.current = event.clientX
+    reviewsStartScrollLeftRef.current = reviewsSliderRef.current.scrollLeft
+    reviewsSliderRef.current.setPointerCapture?.(event.pointerId)
+  }
+
+  const handleReviewsPointerMove = (event) => {
+    if (!reviewsIsDraggingRef.current || !reviewsSliderRef.current) {
+      return
+    }
+
+    const distance = event.clientX - reviewsDragStartXRef.current
+    reviewsSliderRef.current.scrollLeft = reviewsStartScrollLeftRef.current - distance
+  }
+
+  const handleReviewsPointerEnd = (event) => {
+    if (!reviewsIsDraggingRef.current || !reviewsSliderRef.current) {
+      return
+    }
+
+    reviewsIsDraggingRef.current = false
+    reviewsSliderRef.current.releasePointerCapture?.(event.pointerId)
+  }
+
+  const clearSubscribeFeedback = () => {
+    setSubscribeError('')
+    setSubscribeMessage('')
+  }
+
+  const handleSubscribeSubmit = async (event) => {
+    event.preventDefault()
+    clearSubscribeFeedback()
+
+    const email = String(subscribeEmail || '').trim().toLowerCase()
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+    if (!emailPattern.test(email)) {
+      setSubscribeError('Please enter a valid email address.')
+      return
+    }
+
+    if (!supabaseReady || !supabase) {
+      setSubscribeError('Subscription service is temporarily unavailable. Please try again in a moment.')
+      return
+    }
+
+    setSubscribing(true)
+
+    const { error } = await supabase.schema('app').from('newsletter_subscribers').insert({
+      email,
+      source: 'home-subscribe-section',
+    })
+
+    if (error) {
+      const duplicate = error.code === '23505' || error.message?.toLowerCase().includes('duplicate')
+
+      if (duplicate) {
+        setSubscribeMessage("You're already subscribed. We'll keep you on the early-access list.")
+      } else {
+        setSubscribeError('Could not complete subscription right now. Please try again.')
+      }
+
+      setSubscribing(false)
+      return
+    }
+
+    const nextDefaultEmail = String(user?.email || '').trim().toLowerCase()
+    setSubscribeEmail(nextDefaultEmail)
+    lastAutoFilledSubscribeEmailRef.current = nextDefaultEmail
+    setSubscribeMessage("You're in. We'll send updates on new drops and private releases.")
+    setSubscribing(false)
+  }
+
+  useEffect(() => {
+    const userEmail = String(user?.email || '').trim().toLowerCase()
+    const lastAutoFilledEmail = lastAutoFilledSubscribeEmailRef.current
+
+    if (!userEmail) {
+      if (subscribeEmail === lastAutoFilledEmail) {
+        setSubscribeEmail('')
+      }
+      lastAutoFilledSubscribeEmailRef.current = ''
+      return
+    }
+
+    if (!subscribeEmail || subscribeEmail === lastAutoFilledEmail) {
+      setSubscribeEmail(userEmail)
+      lastAutoFilledSubscribeEmailRef.current = userEmail
+    }
+  }, [user?.email, subscribeEmail])
+
+  const scrollReviews = (direction) => {
+    if (!reviewsSliderRef.current) {
+      return
+    }
+
+    const firstCard = reviewsSliderRef.current.querySelector('[data-review-card="true"]')
+    const cardWidth = firstCard?.getBoundingClientRect().width || 320
+    const amount = Math.max(240, Math.round(cardWidth * 0.9))
+
+    reviewsSliderRef.current.scrollBy({
+      left: direction === 'next' ? amount : -amount,
+      behavior: 'smooth',
+    })
+  }
+
+  useEffect(() => {
+    const slider = reviewsSliderRef.current
+    if (!slider) {
+      return undefined
+    }
+
+    let frameId = 0
+    let lastTimestamp = performance.now()
+    const speedPerMs = 0.18
+
+    const animate = (timestamp) => {
+      const delta = timestamp - lastTimestamp
+      lastTimestamp = timestamp
+
+      if (!reviewsIsDraggingRef.current) {
+        const maxScroll = Math.max(0, slider.scrollWidth - slider.clientWidth)
+
+        if (maxScroll > 0) {
+          slider.scrollLeft += reviewsAutoDirectionRef.current * delta * speedPerMs
+
+          if (slider.scrollLeft >= maxScroll - 2) {
+            slider.scrollLeft = maxScroll
+            reviewsAutoDirectionRef.current = -1
+          } else if (slider.scrollLeft <= 2) {
+            slider.scrollLeft = 0
+            reviewsAutoDirectionRef.current = 1
+          }
+        }
+      }
+
+      frameId = window.requestAnimationFrame(animate)
+    }
+
+    frameId = window.requestAnimationFrame(animate)
+
+    return () => {
+      window.cancelAnimationFrame(frameId)
+    }
+  }, [])
+
   return (
-    <div className="relative min-h-screen w-full max-w-[100vw] overflow-x-hidden bg-black text-white selection:bg-white selection:text-black">
+    <div
+      className="relative min-h-screen w-full max-w-[100vw] overflow-x-hidden bg-black text-white selection:bg-white selection:text-black"
+      data-route-critical-loading={isInitialPageReady ? 'false' : 'true'}
+    >
       <div className="pointer-events-none fixed inset-0 -z-10 bg-[radial-gradient(circle_at_10%_10%,rgba(255,255,255,0.18),transparent_32%),radial-gradient(circle_at_86%_18%,rgba(255,255,255,0.13),transparent_30%),radial-gradient(circle_at_50%_90%,rgba(255,255,255,0.11),transparent_32%)]" />
 
       <SiteHeader
         isHome
         onMobileMenuChange={setIsHeaderMobileMenuOpen}
-        announcement={visibleAnnouncement}
-        onAnnouncementDismiss={handleDismissAnnouncement}
+        announcements={visibleAnnouncements}
       />
 
       <main>
@@ -2137,6 +2351,76 @@ function App() {
           </div>
         </section>
 
+        <section id="contact" className="mx-auto w-full max-w-7xl px-5 pb-24 pt-20 sm:px-7 lg:px-10">
+          <div className="relative mb-12 flex items-center gap-4">
+            <div className="h-px flex-1 bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+            <h2 className="display-font text-center text-xs tracking-[0.32em] text-white/50">ABOUT MADEBYVIC</h2>
+            <div className="h-px flex-1 bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+          </div>
+
+          <div className="relative grid gap-12 lg:grid-cols-[1fr_1.1fr] lg:gap-20 items-center">
+            <div className="reveal order-2 lg:order-1 relative">
+              <div className="overflow-hidden bg-black/30 aspect-[3/4]">
+                {aboutImageUrl ? (
+                  <img src={aboutImageUrl} alt="About Madebyvic" className="h-full w-full object-cover object-center grayscale-[50%] transition-all duration-700 hover:grayscale-0" />
+                ) : (
+                  <ImagePlaceholder label="ABOUT IMAGE" ratio="aspect-[3/4]" />
+                )}
+              </div>
+
+              {isAdmin ? (
+                <div className="absolute -bottom-4 left-1/2 -translate-x-1/2">
+                  <label className="action-btn action-btn-outline cursor-pointer bg-black/80 backdrop-blur-sm">
+                    {savingServiceImageKey === aboutImageServiceKey ? 'Saving...' : 'Change Image'}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="sr-only"
+                      onChange={(event) => handleServiceImageUpload(aboutImageServiceKey, event)}
+                      disabled={savingServiceImageKey === aboutImageServiceKey}
+                    />
+                  </label>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="reveal-delay order-1 lg:order-2">
+              <div className="flex items-start justify-between gap-4 mb-8">
+                <div>
+                  <h2 className="display-font text-balance text-4xl uppercase tracking-[0.05em] sm:text-5xl lg:text-5xl">{aboutTitle}</h2>
+                </div>
+                {isAdmin ? (
+                  <button
+                    type="button"
+                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-sm border border-white/30 bg-black/55 text-white transition hover:border-white/70 hover:bg-black/80"
+                    onClick={() => {
+                      clearAboutFeedback()
+                      setAboutTitleInput(aboutTitle)
+                      setAboutBodyInput(aboutBody)
+                      setShowAboutEditor(true)
+                    }}
+                    aria-label="Edit about content"
+                    title="Edit about"
+                  >
+                    <FiEdit2 size={15} />
+                  </button>
+                ) : null}
+              </div>
+
+              <div className="space-y-6">
+                {aboutBody.split(/\n\n+/).map((paragraph, index) => (
+                  <p key={`${paragraph.slice(0, 18)}-${index}`} className="text-sm leading-relaxed text-white/80 sm:text-base">
+                    {paragraph}
+                  </p>
+                ))}
+              </div>
+
+              {aboutAdminError ? <p className="mt-4 text-sm text-red-300">{aboutAdminError}</p> : null}
+              {aboutAdminMessage ? <p className="mt-4 text-sm text-emerald-300">{aboutAdminMessage}</p> : null}
+            </div>
+          </div>
+        </section>
+
         <section id="instagram" className="mx-auto w-full max-w-7xl px-5 py-20 sm:px-7 lg:px-10">
           <div className="text-center">
             <h2 className="display-font text-4xl uppercase tracking-[0.04em] text-white sm:text-5xl lg:text-6xl">Follow me on Instagram</h2>
@@ -2220,72 +2504,133 @@ function App() {
           </div>
         </section>
 
-        <section id="contact" className="mx-auto w-full max-w-7xl px-5 pb-24 pt-20 sm:px-7 lg:px-10">
-          <div className="relative mb-12 flex items-center gap-4">
-            <div className="h-px flex-1 bg-gradient-to-r from-transparent via-white/20 to-transparent" />
-            <h2 className="display-font text-center text-xs tracking-[0.32em] text-white/50">ABOUT MADEBYVIC</h2>
-            <div className="h-px flex-1 bg-gradient-to-r from-transparent via-white/20 to-transparent" />
-          </div>
+        <section id="reviews" className="mx-auto w-full max-w-7xl px-5 py-20 sm:px-7 lg:px-10">
+          <div className="relative overflow-hidden rounded-sm border border-white/15 bg-white/[0.03] p-6 sm:p-8 lg:p-10">
+            <div className="pointer-events-none absolute -left-20 -top-16 h-56 w-56 rounded-full bg-white/10 blur-3xl" />
+            <div className="pointer-events-none absolute -bottom-20 right-0 h-64 w-64 rounded-full bg-white/[0.06] blur-3xl" />
 
-          <div className="relative grid gap-12 lg:grid-cols-[1fr_1.1fr] lg:gap-20 items-center">
-            <div className="reveal order-2 lg:order-1 relative">
-              <div className="overflow-hidden bg-black/30 aspect-[3/4]">
-                {aboutImageUrl ? (
-                  <img src={aboutImageUrl} alt="About Madebyvic" className="h-full w-full object-cover object-center grayscale-[50%] transition-all duration-700 hover:grayscale-0" />
-                ) : (
-                  <ImagePlaceholder label="ABOUT IMAGE" ratio="aspect-[3/4]" />
-                )}
+            <div className="relative">
+              <div className="reveal">
+                <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+                  <div>
+                    <p className="display-font text-xs tracking-[0.34em] text-white/60">CLIENT REVIEWS</p>
+                    <h2 className="display-font mt-3 text-balance text-3xl uppercase tracking-[0.06em] text-white sm:text-4xl lg:text-5xl">
+                      Real Feedback. Real Impact.
+                    </h2>
+                    <p className="mt-5 max-w-3xl text-sm leading-relaxed text-white/75 sm:text-base">
+                      Every project is built through collaboration from first sketch to final delivery. These reviews reflect the real experience of working with Madebyvic.
+                    </p>
+                  </div>
+                </div>
               </div>
 
-              {isAdmin ? (
-                <div className="absolute -bottom-4 left-1/2 -translate-x-1/2">
-                  <label className="action-btn action-btn-outline cursor-pointer bg-black/80 backdrop-blur-sm">
-                    {savingServiceImageKey === aboutImageServiceKey ? 'Saving...' : 'Change Image'}
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="sr-only"
-                      onChange={(event) => handleServiceImageUpload(aboutImageServiceKey, event)}
-                      disabled={savingServiceImageKey === aboutImageServiceKey}
-                    />
-                  </label>
-                </div>
-              ) : null}
-            </div>
+              <div className="relative mt-8 sm:mt-10">
+                <button
+                  type="button"
+                  className="absolute left-1 top-1/2 z-20 hidden h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full border border-white bg-black text-white shadow-[0_0_0_2px_rgba(255,255,255,0.85)] transition hover:scale-[1.03] lg:inline-flex"
+                  onClick={() => scrollReviews('prev')}
+                  aria-label="Scroll reviews left"
+                >
+                  <FiChevronLeft size={19} />
+                </button>
+                <button
+                  type="button"
+                  className="absolute right-1 top-1/2 z-20 hidden h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full border border-white/30 bg-black text-white transition hover:border-white/80 hover:scale-[1.03] lg:inline-flex"
+                  onClick={() => scrollReviews('next')}
+                  aria-label="Scroll reviews right"
+                >
+                  <FiChevronRight size={19} />
+                </button>
 
-            <div className="reveal-delay order-1 lg:order-2">
-              <div className="flex items-start justify-between gap-4 mb-8">
-                <div>
-                  <h2 className="display-font text-balance text-4xl uppercase tracking-[0.05em] sm:text-5xl lg:text-5xl">{aboutTitle}</h2>
-                </div>
-                {isAdmin ? (
-                  <button
-                    type="button"
-                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-sm border border-white/30 bg-black/55 text-white transition hover:border-white/70 hover:bg-black/80"
-                    onClick={() => {
-                      clearAboutFeedback()
-                      setAboutTitleInput(aboutTitle)
-                      setAboutBodyInput(aboutBody)
-                      setShowAboutEditor(true)
-                    }}
-                    aria-label="Edit about content"
-                    title="Edit about"
+                <div className="pointer-events-none absolute inset-y-0 left-0 z-10 hidden w-10 bg-gradient-to-r from-black/55 to-transparent lg:block" />
+                <div className="pointer-events-none absolute inset-y-0 right-0 z-10 hidden w-10 bg-gradient-to-l from-black/55 to-transparent lg:block" />
+
+                <div
+                  ref={reviewsSliderRef}
+                  className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-2 cursor-grab select-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden active:cursor-grabbing"
+                  aria-label="Client reviews slider"
+                  onPointerDown={handleReviewsPointerDown}
+                  onPointerMove={handleReviewsPointerMove}
+                  onPointerUp={handleReviewsPointerEnd}
+                  onPointerCancel={handleReviewsPointerEnd}
+                  onPointerLeave={handleReviewsPointerEnd}
+                >
+                  {clientReviews.map((review, index) => (
+                  <article
+                    key={review.id}
+                    data-review-card="true"
+                    className="reveal-card min-w-[88%] snap-start rounded-sm border border-white/15 bg-black/40 p-5 backdrop-blur-sm sm:min-w-[56%] lg:min-w-[38%] xl:min-w-[31%]"
+                    style={{ animationDelay: `${index * 90}ms` }}
                   >
-                    <FiEdit2 size={15} />
-                  </button>
-                ) : null}
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="display-font text-sm uppercase tracking-[0.14em] text-white">{review.name}</p>
+                        <p className="mt-1 text-[11px] uppercase tracking-[0.14em] text-white/55">{review.context}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[10px] tracking-[0.25em] text-white">★★★★★</p>
+                        <p className="display-font mt-1 text-xs tracking-[0.2em] text-white/80">{review.rating}</p>
+                      </div>
+                    </div>
+
+                    <p className="mt-4 text-sm leading-relaxed text-white/80">"{review.text}"</p>
+
+                    <div className="mt-4 flex items-center justify-between border-t border-white/10 pt-3">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-white/60">{review.service}</p>
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-white/45">{review.date}</p>
+                    </div>
+                  </article>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="subscribe" className="mx-auto w-full max-w-7xl px-5 pb-24 sm:px-7 lg:px-10">
+          <div className="relative overflow-hidden rounded-sm border border-white/15 bg-[linear-gradient(140deg,rgba(255,255,255,0.06),rgba(255,255,255,0.015))] p-6 sm:p-10 lg:p-12">
+            <div className="pointer-events-none absolute -left-14 -top-14 h-48 w-48 rounded-full bg-white/10 blur-3xl" />
+            <div className="pointer-events-none absolute -bottom-16 right-4 h-56 w-56 rounded-full bg-white/[0.08] blur-3xl" />
+
+            <div className="relative grid gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
+              <div className="reveal">
+                <p className="display-font text-xs tracking-[0.34em] text-white/60">PRIVATE LIST</p>
+                <h2 className="display-font mt-3 max-w-3xl text-balance text-3xl uppercase tracking-[0.06em] text-white sm:text-4xl lg:text-5xl">
+                  Get First Access To New Art Drops
+                </h2>
+                <p className="mt-5 max-w-2xl text-sm leading-relaxed text-white/75 sm:text-base">
+                  Join the private list and receive early release alerts, new collection previews, and limited announcements before public launch.
+                </p>
               </div>
 
-              <div className="space-y-6">
-                {aboutBody.split(/\n\n+/).map((paragraph, index) => (
-                  <p key={`${paragraph.slice(0, 18)}-${index}`} className="text-sm leading-relaxed text-white/80 sm:text-base">
-                    {paragraph}
-                  </p>
-                ))}
-              </div>
+              <form className="reveal-delay rounded-sm border border-white/15 bg-black/40 p-5 sm:p-6" onSubmit={handleSubscribeSubmit}>
+                <label className="block text-[11px] uppercase tracking-[0.18em] text-white/60">Email Address</label>
+                <input
+                  type="email"
+                  value={subscribeEmail}
+                  onChange={(event) => {
+                    setSubscribeEmail(event.target.value)
+                    if (subscribeError || subscribeMessage) {
+                      clearSubscribeFeedback()
+                    }
+                  }}
+                  placeholder="you@example.com"
+                  autoComplete="email"
+                  className="mt-3 h-12 w-full rounded-sm border border-white/25 bg-black/45 px-4 text-sm text-white placeholder:text-white/35 outline-none transition focus:border-white/70"
+                  required
+                />
 
-              {aboutAdminError ? <p className="mt-4 text-sm text-red-300">{aboutAdminError}</p> : null}
-              {aboutAdminMessage ? <p className="mt-4 text-sm text-emerald-300">{aboutAdminMessage}</p> : null}
+                <button
+                  type="submit"
+                  className="action-btn action-btn-solid mt-4 w-full justify-center"
+                  disabled={subscribing}
+                >
+                  {subscribing ? 'Subscribing...' : 'Subscribe'}
+                </button>
+
+                {subscribeError ? <p className="mt-3 text-sm text-red-300">{subscribeError}</p> : null}
+                {subscribeMessage ? <p className="mt-3 text-sm text-emerald-300">{subscribeMessage}</p> : null}
+              </form>
             </div>
           </div>
         </section>

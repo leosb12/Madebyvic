@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
+const announcementRotationMs = 5500
+
 function SiteHeader({
   isHome = false,
   onMobileMenuChange,
@@ -10,6 +12,7 @@ function SiteHeader({
   solidAfterScroll = false,
   solidScrollThreshold = 0,
   announcement = null,
+  announcements = null,
   onAnnouncementDismiss,
 }) {
   const navigate = useNavigate()
@@ -17,6 +20,7 @@ function SiteHeader({
   const announcementRef = useRef(null)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [isAnnouncementClosed, setIsAnnouncementClosed] = useState(false)
+  const [announcementIndex, setAnnouncementIndex] = useState(0)
   const [announcementHeight, setAnnouncementHeight] = useState(0)
   const [scrollY, setScrollY] = useState(0)
   const [isSolid, setIsSolid] = useState(() => {
@@ -33,6 +37,13 @@ function SiteHeader({
 
   const closeMobileMenu = () => setIsMobileMenuOpen(false)
   const isHomePath = location.pathname === '/'
+  const announcementItems = Array.isArray(announcements)
+    ? announcements.filter((item) => item?.message)
+    : announcement?.message
+      ? [announcement]
+      : []
+  const hasMultipleAnnouncements = announcementItems.length > 1
+  const activeAnnouncement = announcementItems[announcementIndex] || announcementItems[0] || null
 
   const scrollToSection = (hash) => {
     if (!hash) return
@@ -80,19 +91,48 @@ function SiteHeader({
   }, [solidAfterScroll, solidScrollThreshold])
 
   useEffect(() => {
+    setAnnouncementIndex(0)
     setIsAnnouncementClosed(false)
-  }, [announcement?.id])
+  }, [announcementItems.length])
+
+  useEffect(() => {
+    if (!isHome || isAnnouncementClosed || announcementItems.length <= 1) {
+      return
+    }
+
+    const interval = window.setInterval(() => {
+      setAnnouncementIndex((current) => (current + 1) % announcementItems.length)
+    }, announcementRotationMs)
+
+    return () => {
+      window.clearInterval(interval)
+    }
+  }, [isHome, isAnnouncementClosed, announcementItems.length])
 
   const closeAnnouncement = () => {
     setIsAnnouncementClosed(true)
     if (typeof onAnnouncementDismiss === 'function') {
-      onAnnouncementDismiss(announcement)
+      onAnnouncementDismiss(activeAnnouncement)
     }
+  }
+
+  const showPrevAnnouncement = () => {
+    if (!hasMultipleAnnouncements) {
+      return
+    }
+    setAnnouncementIndex((current) => (current - 1 + announcementItems.length) % announcementItems.length)
+  }
+
+  const showNextAnnouncement = () => {
+    if (!hasMultipleAnnouncements) {
+      return
+    }
+    setAnnouncementIndex((current) => (current + 1) % announcementItems.length)
   }
 
   const useTransparentStyle = transparent && !isSolid
   const shouldOverlay = overlay || transparent
-  const showAnnouncement = isHome && Boolean(announcement?.message) && !isAnnouncementClosed
+  const showAnnouncement = isHome && Boolean(activeAnnouncement?.message) && !isAnnouncementClosed
   const navOffset = 73
   const headerTop = showAnnouncement ? Math.max(0, announcementHeight - scrollY) : 0
   const mobileMenuTop = headerTop + navOffset
@@ -119,10 +159,35 @@ function SiteHeader({
     <>
       {showAnnouncement ? (
         <div ref={announcementRef} className="w-full border-b border-black/15 bg-[#f7f4ee] text-black">
-          <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-4 px-5 py-3 sm:px-7 lg:px-10">
+          <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-3 px-5 py-3 sm:px-7 lg:px-10">
+            {hasMultipleAnnouncements ? (
+              <button
+                type="button"
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center border border-black/45 text-xl text-black transition hover:bg-black hover:text-white"
+                onClick={showPrevAnnouncement}
+                aria-label="Previous announcement"
+                title="Previous"
+              >
+                &lt;
+              </button>
+            ) : null}
+
             <p className="flex-1 text-center font-serif text-[18px] leading-[1.35] tracking-[0.01em] text-black/90">
-              {announcement.message}
+              {activeAnnouncement.message}
             </p>
+
+            {hasMultipleAnnouncements ? (
+              <button
+                type="button"
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center border border-black/45 text-xl text-black transition hover:bg-black hover:text-white"
+                onClick={showNextAnnouncement}
+                aria-label="Next announcement"
+                title="Next"
+              >
+                &gt;
+              </button>
+            ) : null}
+
             <button
               type="button"
               className="inline-flex h-11 w-11 shrink-0 items-center justify-center border border-black/70 text-xl text-black transition hover:bg-black hover:text-white"

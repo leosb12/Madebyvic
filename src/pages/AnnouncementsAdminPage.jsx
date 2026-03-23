@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Navigate } from 'react-router-dom'
-import { FiCheckCircle, FiEdit2, FiPlus, FiTrash2 } from 'react-icons/fi'
+import { FiCheckCircle, FiEdit2, FiImage, FiMail, FiPlus, FiSend, FiTrash2 } from 'react-icons/fi'
 import SiteHeader from '../components/SiteHeader'
 import SiteFooter from '../components/SiteFooter'
 import { useAuth } from '../context/AuthContext'
@@ -19,6 +19,39 @@ const emptyProfileEdit = {
   fullName: '',
   phone: '',
   isAdmin: false,
+}
+
+const maxNewsletterImageBytes = 8 * 1024 * 1024
+const maxNewsletterImageCount = 5
+
+const sanitizeHtml = (value) =>
+  String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+
+const buildNewsletterHtml = (subject, bodyText, imageUrls) => {
+  const formattedBody = sanitizeHtml(bodyText).replace(/\n/g, '<br />')
+  const imageBlocks = imageUrls
+    .map(
+      (url) =>
+        `<div style="margin-top:18px;"><img src="${sanitizeHtml(url)}" alt="Newsletter image" style="width:100%;max-width:680px;border-radius:10px;display:block;" /></div>`,
+    )
+    .join('')
+
+  return `
+    <div style="background:#080808;padding:28px 16px;font-family:Arial,sans-serif;color:#f5f5f5;">
+      <div style="max-width:700px;margin:0 auto;border:1px solid rgba(255,255,255,0.18);background:#101010;padding:24px;border-radius:14px;">
+        <p style="margin:0 0 12px 0;font-size:11px;letter-spacing:0.26em;text-transform:uppercase;color:#bdbdbd;">Madebyvic Update</p>
+        <h1 style="margin:0 0 14px 0;font-size:28px;line-height:1.15;letter-spacing:0.04em;text-transform:uppercase;color:#ffffff;">${sanitizeHtml(subject)}</h1>
+        <p style="margin:0;font-size:15px;line-height:1.7;color:#e8e8e8;">${formattedBody}</p>
+        ${imageBlocks}
+        <p style="margin:22px 0 0 0;font-size:12px;color:#9b9b9b;">You are receiving this email because you subscribed on madebyvic.com.</p>
+      </div>
+    </div>
+  `
 }
 
 function AnnouncementsAdminPage() {
@@ -40,11 +73,15 @@ function AnnouncementsAdminPage() {
   const [profilesMessage, setProfilesMessage] = useState('')
   const [editingProfileId, setEditingProfileId] = useState('')
   const [profileEdit, setProfileEdit] = useState(emptyProfileEdit)
-
-  const activeAnnouncementId = useMemo(
-    () => announcements.find((item) => item.is_active)?.id ?? null,
-    [announcements],
-  )
+  const [subscriberCount, setSubscriberCount] = useState(0)
+  const [subscribersLoading, setSubscribersLoading] = useState(true)
+  const [newsletterSubject, setNewsletterSubject] = useState('')
+  const [newsletterPreheader, setNewsletterPreheader] = useState('')
+  const [newsletterBody, setNewsletterBody] = useState('')
+  const [newsletterImageFiles, setNewsletterImageFiles] = useState([])
+  const [newsletterSending, setNewsletterSending] = useState(false)
+  const [newsletterError, setNewsletterError] = useState('')
+  const [newsletterMessage, setNewsletterMessage] = useState('')
 
   const profilesTotalPages = useMemo(
     () => Math.max(1, Math.ceil((profilesTotalCount || 0) / profilesPageSize)),
@@ -59,6 +96,11 @@ function AnnouncementsAdminPage() {
   const clearProfilesFeedback = () => {
     setProfilesError('')
     setProfilesMessage('')
+  }
+
+  const clearNewsletterFeedback = () => {
+    setNewsletterError('')
+    setNewsletterMessage('')
   }
 
   const loadAnnouncements = async () => {
@@ -114,6 +156,34 @@ function AnnouncementsAdminPage() {
     setProfilesLoading(false)
   }
 
+  const loadSubscriberCount = async () => {
+    if (!supabaseReady || !supabase) {
+      setSubscribersLoading(false)
+      return
+    }
+
+    setSubscribersLoading(true)
+
+    const { count, error: countError } = await supabase
+      .schema('app')
+      .from('newsletter_subscribers')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'active')
+
+    if (countError) {
+      setNewsletterError(
+        countError.message?.toLowerCase().includes('does not exist')
+          ? 'Missing table app.newsletter_subscribers. Run the SQL setup first.'
+          : countError.message || 'Could not load subscriber count.',
+      )
+      setSubscribersLoading(false)
+      return
+    }
+
+    setSubscriberCount(Number(count || 0))
+    setSubscribersLoading(false)
+  }
+
   useEffect(() => {
     if (!loading && isAdmin) {
       loadAnnouncements()
@@ -125,6 +195,12 @@ function AnnouncementsAdminPage() {
       loadProfiles(profilesPage)
     }
   }, [loading, isAdmin, profilesPage])
+
+  useEffect(() => {
+    if (!loading && isAdmin) {
+      loadSubscriberCount()
+    }
+  }, [loading, isAdmin])
 
   const resetForm = () => {
     setForm(emptyForm)
@@ -146,10 +222,6 @@ function AnnouncementsAdminPage() {
     }
 
     setSaving(true)
-
-    if (form.isActive) {
-      await supabase.schema('app').from('site_announcements').update({ is_active: false }).neq('id', form.id || -1)
-    }
 
     const payload = {
       message: nextMessage,
@@ -244,8 +316,6 @@ function AnnouncementsAdminPage() {
       setSaving(false)
       return
     }
-
-    await supabase.schema('app').from('site_announcements').update({ is_active: false }).neq('id', item.id)
 
     const { error: activateError } = await supabase
       .schema('app')
@@ -357,6 +427,139 @@ function AnnouncementsAdminPage() {
     }
   }
 
+  const handleNewsletterImageSelect = (event) => {
+    clearNewsletterFeedback()
+    const files = Array.from(event.target.files || [])
+
+    if (files.length === 0) {
+      return
+    }
+
+    const tooMany = files.length > maxNewsletterImageCount
+    const invalidType = files.some((file) => !String(file.type || '').startsWith('image/'))
+    const tooLarge = files.some((file) => file.size > maxNewsletterImageBytes)
+
+    if (tooMany) {
+      setNewsletterError(`You can attach up to ${maxNewsletterImageCount} images.`)
+      event.target.value = ''
+      return
+    }
+
+    if (invalidType) {
+      setNewsletterError('Only image files are allowed.')
+      event.target.value = ''
+      return
+    }
+
+    if (tooLarge) {
+      setNewsletterError('Each image must be 8MB or smaller.')
+      event.target.value = ''
+      return
+    }
+
+    setNewsletterImageFiles(files)
+    event.target.value = ''
+  }
+
+  const uploadNewsletterImages = async (files) => {
+    const urls = []
+
+    for (const file of files) {
+      const extension = file.name.includes('.') ? file.name.slice(file.name.lastIndexOf('.') + 1).toLowerCase() : 'jpg'
+      const safeExt = extension.replace(/[^a-z0-9]/g, '') || 'jpg'
+      const objectPath = `campaigns/${Date.now()}-${Math.random().toString(36).slice(2, 9)}.${safeExt}`
+
+      const { error: uploadError } = await supabase.storage.from('newsletter-assets').upload(objectPath, file, {
+        cacheControl: '3600',
+        upsert: false,
+        contentType: file.type || 'image/jpeg',
+      })
+
+      if (uploadError) {
+        throw new Error(uploadError.message || 'Could not upload one of the selected images.')
+      }
+
+      const { data: publicUrlData } = supabase.storage.from('newsletter-assets').getPublicUrl(objectPath)
+      if (!publicUrlData?.publicUrl) {
+        throw new Error('Could not generate public URL for an uploaded image.')
+      }
+
+      urls.push(publicUrlData.publicUrl)
+    }
+
+    return urls
+  }
+
+  const handleSendNewsletter = async (event) => {
+    event.preventDefault()
+    clearNewsletterFeedback()
+
+    if (!supabaseReady || !supabase) {
+      setNewsletterError('Service is temporarily unavailable.')
+      return
+    }
+
+    const subject = newsletterSubject.trim()
+    const preheader = newsletterPreheader.trim()
+    const body = newsletterBody.trim()
+
+    if (!subject) {
+      setNewsletterError('Please add an email subject.')
+      return
+    }
+
+    if (!body) {
+      setNewsletterError('Please add the newsletter message body.')
+      return
+    }
+
+    if (subscriberCount === 0) {
+      setNewsletterError('There are no active subscribers yet.')
+      return
+    }
+
+    setNewsletterSending(true)
+
+    try {
+      const imageUrls = newsletterImageFiles.length > 0 ? await uploadNewsletterImages(newsletterImageFiles) : []
+      const html = buildNewsletterHtml(subject, body, imageUrls)
+
+      const { data, error: invokeError } = await supabase.functions.invoke('send-subscriber-broadcast', {
+        body: {
+          subject,
+          preheader,
+          bodyText: body,
+          html,
+          imageUrls,
+        },
+      })
+
+      if (invokeError) {
+        throw new Error(
+          invokeError.message?.toLowerCase().includes('not found')
+            ? 'Missing function send-subscriber-broadcast. Deploy the Edge Function first.'
+            : invokeError.message || 'Could not trigger newsletter sending.',
+        )
+      }
+
+      const sentCount = Number(data?.sentCount || 0)
+      setNewsletterMessage(
+        sentCount > 0
+          ? `Newsletter sent to ${sentCount} subscriber${sentCount === 1 ? '' : 's'}.`
+          : 'Newsletter request queued. Check function logs for delivery details.',
+      )
+      setNewsletterSubject('')
+      setNewsletterPreheader('')
+      setNewsletterBody('')
+      setNewsletterImageFiles([])
+      await loadSubscriberCount()
+    } catch (sendError) {
+      setNewsletterError(sendError?.message || 'Could not send newsletter.')
+    } finally {
+      setNewsletterSending(false)
+    }
+  }
+
   if (!loading && !isAdmin) {
     return <Navigate to="/" replace />
   }
@@ -427,7 +630,7 @@ function AnnouncementsAdminPage() {
                 onChange={(event) => setForm((prev) => ({ ...prev, isActive: event.target.checked }))}
                 className="h-4 w-4 rounded-sm border-white/25 bg-black text-white"
               />
-              Set as active announcement
+              Mark as active announcement
             </label>
 
             <div className="flex flex-wrap items-center gap-3">
@@ -467,7 +670,7 @@ function AnnouncementsAdminPage() {
                     <div>
                       <p className="text-sm text-white/90">{item.message}</p>
                       <p className="mt-2 text-xs tracking-[0.16em] text-white/45 uppercase">
-                        ID {item.id} {item.id === activeAnnouncementId ? '• ACTIVE' : ''}
+                        ID {item.id} {item.is_active ? '• ACTIVE' : ''}
                       </p>
                     </div>
 
@@ -511,6 +714,91 @@ function AnnouncementsAdminPage() {
               ))}
             </div>
           </div>
+        </section>
+
+        <section className="mt-8 rounded-sm border border-white/15 bg-white/[0.02] p-6 sm:p-8">
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-5">
+            <div>
+              <p className="display-font text-xs tracking-[0.3em] text-white/55">ADMIN ONLY</p>
+              <h2 className="display-font mt-2 text-3xl uppercase tracking-[0.06em] sm:text-4xl">Subscribers Broadcast</h2>
+              <p className="mt-3 max-w-3xl text-sm text-white/70">
+                Write one email and send it to all active subscribers. You can attach up to 5 images.
+              </p>
+            </div>
+
+            <div className="inline-flex items-center gap-2 rounded-sm border border-white/20 bg-black/45 px-4 py-3 text-sm text-white/85">
+              <FiMail size={15} />
+              {subscribersLoading ? 'Loading subscribers...' : `${subscriberCount} active subscriber${subscriberCount === 1 ? '' : 's'}`}
+            </div>
+          </div>
+
+          {newsletterError ? <p className="mt-4 text-sm text-red-300">{newsletterError}</p> : null}
+          {newsletterMessage ? <p className="mt-4 text-sm text-emerald-300">{newsletterMessage}</p> : null}
+
+          <form className="mt-6 grid gap-4" onSubmit={handleSendNewsletter}>
+            <label className="field-wrap">
+              <span>Email subject</span>
+              <input
+                value={newsletterSubject}
+                onChange={(event) => setNewsletterSubject(event.target.value)}
+                placeholder="New mural release this Friday"
+              />
+            </label>
+
+            <label className="field-wrap">
+              <span>Preheader (optional)</span>
+              <input
+                value={newsletterPreheader}
+                onChange={(event) => setNewsletterPreheader(event.target.value)}
+                placeholder="Early access for subscribers only."
+              />
+            </label>
+
+            <label className="field-wrap">
+              <span>Message body</span>
+              <textarea
+                rows={8}
+                value={newsletterBody}
+                onChange={(event) => setNewsletterBody(event.target.value)}
+                placeholder="Hey, private list. New originals just dropped..."
+              />
+            </label>
+
+            <label className="field-wrap">
+              <span>Attach images</span>
+              <div className="flex flex-wrap items-center gap-3">
+                <label className="action-btn action-btn-outline cursor-pointer">
+                  <FiImage size={14} />
+                  Select Images
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="sr-only"
+                    onChange={handleNewsletterImageSelect}
+                  />
+                </label>
+                <p className="text-xs text-white/60">Max {maxNewsletterImageCount} images, 8MB each.</p>
+              </div>
+
+              {newsletterImageFiles.length > 0 ? (
+                <ul className="mt-3 grid gap-2 text-sm text-white/75">
+                  {newsletterImageFiles.map((file) => (
+                    <li key={`${file.name}-${file.size}`} className="rounded-sm border border-white/10 bg-black/30 px-3 py-2">
+                      {file.name}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </label>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <button type="submit" className="action-btn action-btn-solid" disabled={newsletterSending || subscribersLoading}>
+                <FiSend size={14} />
+                {newsletterSending ? 'Sending...' : 'Send To All Subscribers'}
+              </button>
+            </div>
+          </form>
         </section>
 
         <section className="mt-8 rounded-sm border border-white/15 bg-white/[0.02] p-6 sm:p-8">
