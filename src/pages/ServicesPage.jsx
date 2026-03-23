@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { FiEdit2, FiX } from 'react-icons/fi'
+import { FiArrowUpRight, FiEdit2, FiX } from 'react-icons/fi'
 import Cropper from 'react-easy-crop'
 import 'react-easy-crop/react-easy-crop.css'
 import SiteHeader from '../components/SiteHeader'
@@ -862,8 +862,12 @@ function ServicesPage() {
           <div className="grid gap-6 md:grid-cols-3">
             {cardsWithImage.map((card) => (
               <article key={card.title} className="space-y-3">
-                <Link to={`/services/${card.slug}`} className="group block">
-                  <div className="relative overflow-hidden border border-black/15 bg-white shadow-[0_12px_28px_rgba(0,0,0,0.1)] transition duration-300 group-hover:shadow-[0_16px_34px_rgba(0,0,0,0.18)]">
+                <Link
+                  to={`/services/${card.slug}`}
+                  className="group block cursor-pointer rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#ece9e4]"
+                  aria-label={`Open ${card.title} service page`}
+                >
+                  <div className="relative overflow-hidden border border-black/15 bg-white shadow-[0_12px_28px_rgba(0,0,0,0.1)] transition duration-300 group-hover:-translate-y-1 group-hover:border-black/45 group-hover:shadow-[0_18px_38px_rgba(0,0,0,0.2)] group-focus-visible:-translate-y-1 group-focus-visible:border-black/45 group-focus-visible:shadow-[0_18px_38px_rgba(0,0,0,0.2)]">
                     <div className="relative h-[340px] w-full">
                       {card.items.length > 0 ? (
                         card.items.map((item, index) => {
@@ -882,6 +886,13 @@ function ServicesPage() {
                       ) : (
                         <div className="absolute inset-0 bg-black" />
                       )}
+
+                      <div className="absolute left-3 top-3 z-10 inline-flex items-center gap-2 rounded-full border border-white/80 bg-black/75 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-white shadow-lg">
+                        Click to open
+                        <FiArrowUpRight size={12} className="transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
+                      </div>
+
+                      <div className="pointer-events-none absolute inset-0 border-2 border-transparent transition duration-300 group-hover:border-white/60 group-focus-visible:border-white/60" />
 
                       <div className="absolute inset-x-0 bottom-0 bg-[linear-gradient(180deg,transparent,rgba(0,0,0,0.7))] px-4 pb-4 pt-12 text-white opacity-0 transition duration-300 group-hover:opacity-100">
                         <p className="display-font text-xs tracking-[0.25em]">OPEN SERVICE PAGE</p>
@@ -902,7 +913,13 @@ function ServicesPage() {
                       ) : null}
                     </div>
                   </div>
-                  <h3 className="display-font mt-3 text-4xl tracking-[0.01em] text-black">{card.title}</h3>
+                  <div className="mt-3 flex items-center justify-between gap-3">
+                    <h3 className="display-font text-4xl tracking-[0.01em] text-black">{card.title}</h3>
+                    <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-black/70 transition group-hover:text-black">
+                      View details
+                      <FiArrowUpRight size={13} className="transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
+                    </span>
+                  </div>
                 </Link>
               </article>
             ))}
