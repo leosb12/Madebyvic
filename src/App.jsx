@@ -137,6 +137,11 @@ const instagramCardSlots = [
   { key: 'instagram-card-03', label: 'POST 03' },
   { key: 'instagram-card-04', label: 'POST 04' },
 ]
+const subscribeOfferSlots = [
+  { key: 'subscribe-offer-main', label: 'FEATURED OFFER', ratio: 'aspect-[4/5]' },
+  { key: 'subscribe-offer-top', label: 'OFFER PREVIEW 01', ratio: 'aspect-[16/10]' },
+  { key: 'subscribe-offer-bottom', label: 'OFFER PREVIEW 02', ratio: 'aspect-[16/10]' },
+]
 
 const buildUniqueFileName = (fileName, existingNames) => {
   const dotIndex = fileName.lastIndexOf('.')
@@ -428,6 +433,10 @@ function App() {
     imageUrl: serviceImagesByKey[item.key]?.image_url || '',
     postUrl: instagramLinksByKey[item.key] || instagramProfileUrl,
   }))
+  const subscribeOfferCards = subscribeOfferSlots.map((item) => ({
+    ...item,
+    imageUrl: serviceImagesByKey[item.key]?.image_url || '',
+  }))
   const visibleAnnouncements = useMemo(
     () => (Array.isArray(homeAnnouncements) ? homeAnnouncements.filter((item) => item?.message) : []),
     [homeAnnouncements],
@@ -443,15 +452,40 @@ function App() {
   const isLogoCrop = pendingServiceKey.startsWith('logo-concept-')
   const isApparelCrop = pendingServiceKey.startsWith('apparel-mockup-')
   const isInstagramCrop = pendingServiceKey.startsWith('instagram-card-')
+  const isSubscribeMainCrop = pendingServiceKey === 'subscribe-offer-main'
+  const isSubscribeDetailCrop =
+    pendingServiceKey === 'subscribe-offer-top' || pendingServiceKey === 'subscribe-offer-bottom'
   const isAboutCrop = pendingServiceKey === aboutImageServiceKey
-  const serviceCropAspect = isAboutCrop ? 3 / 4 : isLogoCrop || isApparelCrop ? 1 : isMuralCrop ? 4 / 5 : isInstagramCrop ? 4 / 3 : 16 / 10
-  const serviceCropFormatLabel = isAboutCrop ? '3:4' : isLogoCrop || isApparelCrop ? '1:1' : isMuralCrop ? '4:5' : isInstagramCrop ? '4:3' : '16:10'
+  const serviceCropAspect = isAboutCrop
+    ? 3 / 4
+    : isLogoCrop || isApparelCrop
+      ? 1
+      : isMuralCrop || isSubscribeMainCrop
+        ? 4 / 5
+        : isInstagramCrop
+          ? 4 / 3
+          : isSubscribeDetailCrop
+            ? 16 / 10
+            : 16 / 10
+  const serviceCropFormatLabel = isAboutCrop
+    ? '3:4'
+    : isLogoCrop || isApparelCrop
+      ? '1:1'
+      : isMuralCrop || isSubscribeMainCrop
+        ? '4:5'
+        : isInstagramCrop
+          ? '4:3'
+          : isSubscribeDetailCrop
+            ? '16:10'
+            : '16:10'
   const serviceCropTitle = isLogoCrop
     ? 'Adjust Logo Image'
     : isMuralCrop
       ? 'Adjust Mural Image'
       : isInstagramCrop
         ? 'Adjust Instagram Card'
+        : isSubscribeMainCrop || isSubscribeDetailCrop
+          ? 'Adjust Subscribe Image'
       : isApparelCrop
         ? 'Adjust Apparel Image'
         : isAboutCrop
@@ -2621,7 +2655,7 @@ function App() {
             <div className="pointer-events-none absolute -left-14 -top-14 h-48 w-48 rounded-full bg-white/10 blur-3xl" />
             <div className="pointer-events-none absolute -bottom-16 right-4 h-56 w-56 rounded-full bg-white/[0.08] blur-3xl" />
 
-            <div className="relative grid gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
+            <div className="relative grid gap-8 lg:grid-cols-[1fr_0.95fr_0.9fr] lg:items-center">
               <div className="reveal">
                 <p className="display-font text-xs tracking-[0.34em] text-white/60">PRIVATE LIST</p>
                 <h2 className="display-font mt-3 max-w-3xl text-balance text-3xl uppercase tracking-[0.06em] text-white sm:text-4xl lg:text-5xl">
@@ -2630,6 +2664,55 @@ function App() {
                 <p className="mt-5 max-w-2xl text-sm leading-relaxed text-white/75 sm:text-base">
                   Join the private list and receive early release alerts, new collection previews, and limited announcements before public launch.
                 </p>
+              </div>
+
+              <div className="reveal-delay">
+                <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                  {subscribeOfferCards.map((card) => {
+                    const isMainCard = card.key === 'subscribe-offer-main'
+
+                    return (
+                      <article
+                        key={card.key}
+                        className={`group relative overflow-hidden rounded-sm border border-white/15 bg-black/35 ${
+                          isMainCard ? 'row-span-2' : ''
+                        }`}
+                      >
+                        {card.imageUrl ? (
+                          <div className={card.ratio}>
+                            <img
+                              src={card.imageUrl}
+                              alt={card.label}
+                              className="h-full w-full object-cover object-center transition duration-500 group-hover:scale-[1.03]"
+                            />
+                          </div>
+                        ) : (
+                          <ImagePlaceholder label={card.label} ratio={card.ratio} />
+                        )}
+
+                        {isAdmin ? (
+                          <label className="absolute right-3 top-3 inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-sm border border-white/30 bg-black/60 text-white transition hover:border-white/70 hover:bg-black/80">
+                            <FiEdit2 size={15} />
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="sr-only"
+                              onChange={(event) => handleServiceImageUpload(card.key, event)}
+                              disabled={savingServiceImageKey === card.key}
+                            />
+                          </label>
+                        ) : null}
+                      </article>
+                    )
+                  })}
+                </div>
+
+                {isAdmin ? (
+                  <div className="mt-4 rounded-sm border border-white/10 bg-white/[0.02] p-4">
+                    <p className="display-font text-[11px] tracking-[0.2em] text-white/70">SUBSCRIBE OFFERS IMAGES ADMIN</p>
+                    <p className="mt-2 text-xs text-white/55">Each image uses exact crop ratio according to its card format.</p>
+                  </div>
+                ) : null}
               </div>
 
               <form className="reveal-delay rounded-sm border border-white/15 bg-black/40 p-5 sm:p-6" onSubmit={handleSubscribeSubmit}>
