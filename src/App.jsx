@@ -1340,6 +1340,17 @@ function App() {
   }
 
   const handleReviewsPointerDown = (event) => {
+    // Pause auto-scroll immediately on interaction
+    reviewsScrollPausedRef.current = true
+    if (reviewsScrollTimeoutRef.current) {
+      clearTimeout(reviewsScrollTimeoutRef.current)
+    }
+
+    // If on mobile (touch), allow native scroll instead of manual JS drag
+    if (event.pointerType === 'touch') {
+      return
+    }
+
     if (!reviewsSliderRef.current) {
       return
     }
@@ -1360,6 +1371,14 @@ function App() {
   }
 
   const handleReviewsPointerEnd = (event) => {
+    // Resume auto-scroll after delay so user can read or inertia finishes
+    if (reviewsScrollTimeoutRef.current) {
+      clearTimeout(reviewsScrollTimeoutRef.current)
+    }
+    reviewsScrollTimeoutRef.current = setTimeout(() => {
+      reviewsScrollPausedRef.current = false
+    }, 2000)
+
     if (!reviewsIsDraggingRef.current || !reviewsSliderRef.current) {
       return
     }
@@ -2141,7 +2160,7 @@ function App() {
                 </div>
               ) : null}
 
-              <div className="mt-8 grid gap-5 sm:grid-cols-2">
+              <div className="mt-8 grid grid-cols-2 gap-3 sm:gap-5 sm:grid-cols-2">
                 {muralGallery.map((item) => (
                   <article
                     key={item.key}
@@ -2221,7 +2240,7 @@ function App() {
               <p className="mt-4 text-sm leading-relaxed text-white/75">
                 Your logo sets the tone for your whole brand and becomes your signature. I design bold, eye-catching logos that tell your story and match your vibe. From clean and minimal to street-inspired and edgy, every logo is made to stand out and represent your brand with style.
               </p>
-              <div className="mt-6 grid gap-4 sm:grid-cols-2">
+              <div className="mt-6 grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-2">
                 {logoConcepts.map((item) => (
                   <article
                     key={item.key}
