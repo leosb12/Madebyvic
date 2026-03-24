@@ -154,30 +154,38 @@ function ContactPage() {
   }
 
   const handleSubmit = async (e) => {
-    e.preventDefault()
-    setLoading(true)
-    setError('')
-    setSuccess(false)
-    try {
-      const res = await fetch('https://rhdgnxegrsdsrkrhqxey.supabase.co/functions/v1/dynamic-endpoint', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-      })
-      const data = await res.json()
-      if (res.ok) {
-        setSuccess(true)
-        setForm({ firstName: '', lastName: '', email: '', newsletter: false, phone: '', services: [], budget: '', howHeard: '', message: '' })
-      } else {
-        setError(data.error || 'Error sending message')
-      }
-    } catch (err) {
-      setError('Network error')
-    } finally {
-      setLoading(false)
-    }
-  }
+  e.preventDefault()
+  setLoading(true)
+  setError('')
+  setSuccess(false)
 
+  try {
+    const { data, error } = await supabase.functions.invoke('dynamic-endpoint', {
+      body: form,
+    })
+
+    if (!error) {
+      setSuccess(true)
+      setForm({
+        firstName: '',
+        lastName: '',
+        email: '',
+        newsletter: false,
+        phone: '',
+        services: [],
+        budget: '',
+        howHeard: '',
+        message: '',
+      })
+    } else {
+      setError(error.message || 'Error sending message')
+    }
+  } catch (err) {
+    setError('Network error')
+  } finally {
+    setLoading(false)
+  }
+}
   return (
     <div className="min-h-screen bg-[#fffdfa] text-[#1a1a1a] selection:bg-black selection:text-white flex flex-col">
       <SiteHeader />

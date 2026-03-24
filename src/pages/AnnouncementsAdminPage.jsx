@@ -491,75 +491,108 @@ function AnnouncementsAdminPage() {
     return urls
   }
 
-  const handleSendNewsletter = async (event) => {
-    event.preventDefault()
-    clearNewsletterFeedback()
+const handleSendNewsletter = async (event) => {
+  event.preventDefault()
+  clearNewsletterFeedback()
 
-    if (!supabaseReady || !supabase) {
-      setNewsletterError('Service is temporarily unavailable.')
-      return
+  if (!supabaseReady || !supabase) {
+    setNewsletterError('Service is temporarily unavailable.')
+    return
+  }
+
+  const subject = newsletterSubject.trim()
+  const preheader = newsletterPreheader.trim()
+  const body = newsletterBody.trim()
+
+  if (!subject) {
+    setNewsletterError('Please add an email subject.')
+    return
+  }
+
+  if (!body) {
+    setNewsletterError('Please add the newsletter message body.')
+    return
+  }
+
+  if (subscriberCount === 0) {
+    setNewsletterError('There are no active subscribers yet.')
+    return
+  }
+
+  setNewsletterSending(true)
+
+  try {
+    const imageUrls =
+      newsletterImageFiles.length > 0
+        ? await uploadNewsletterImages(newsletterImageFiles)
+        : []
+
+    const html = buildNewsletterHtml(subject, body, imageUrls)
+
+    // 🔥 Obtener sesión correctamente
+    const {
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession()
+
+    if (sessionError) {
+      throw new Error(sessionError.message || 'Could not read your session.')
     }
 
-    const subject = newsletterSubject.trim()
-    const preheader = newsletterPreheader.trim()
-    const body = newsletterBody.trim()
-
-    if (!subject) {
-      setNewsletterError('Please add an email subject.')
-      return
+    if (!session?.access_token) {
+      throw new Error('Your admin session expired. Log in again and retry.')
     }
 
-    if (!body) {
-      setNewsletterError('Please add the newsletter message body.')
-      return
-    }
-
-    if (subscriberCount === 0) {
-      setNewsletterError('There are no active subscribers yet.')
-      return
-    }
-
-    setNewsletterSending(true)
-
-    try {
-      const imageUrls = newsletterImageFiles.length > 0 ? await uploadNewsletterImages(newsletterImageFiles) : []
-      const html = buildNewsletterHtml(subject, body, imageUrls)
-
-      const { data, error: invokeError } = await supabase.functions.invoke('send-subscriber-broadcast', {
-        body: {
+    // 🔥 Llamada correcta a Edge Function
+    const response = await fetch(
+      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-subscriber-broadcast`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
           subject,
           preheader,
           bodyText: body,
           html,
           imageUrls,
-        },
-      })
-
-      if (invokeError) {
-        throw new Error(
-          invokeError.message?.toLowerCase().includes('not found')
-            ? 'Missing function send-subscriber-broadcast. Deploy the Edge Function first.'
-            : invokeError.message || 'Could not trigger newsletter sending.',
-        )
+        }),
       }
+    )
 
-      const sentCount = Number(data?.sentCount || 0)
-      setNewsletterMessage(
-        sentCount > 0
-          ? `Newsletter sent to ${sentCount} subscriber${sentCount === 1 ? '' : 's'}.`
-          : 'Newsletter request queued. Check function logs for delivery details.',
+    const data = await response.json().catch(() => ({}))
+
+    if (!response.ok) {
+      throw new Error(
+        data?.error || data?.message || 'Could not trigger newsletter sending.'
       )
-      setNewsletterSubject('')
-      setNewsletterPreheader('')
-      setNewsletterBody('')
-      setNewsletterImageFiles([])
-      await loadSubscriberCount()
-    } catch (sendError) {
-      setNewsletterError(sendError?.message || 'Could not send newsletter.')
-    } finally {
-      setNewsletterSending(false)
     }
+
+    const sentCount = Number(data?.sentCount || 0)
+
+    setNewsletterMessage(
+      sentCount > 0
+        ? `Newsletter sent to ${sentCount} subscriber${
+            sentCount === 1 ? '' : 's'
+          }.`
+        : 'Newsletter request queued. Check function logs for delivery details.'
+    )
+
+    setNewsletterSubject('')
+    setNewsletterPreheader('')
+    setNewsletterBody('')
+    setNewsletterImageFiles([])
+
+    await loadSubscriberCount()
+  } catch (sendError) {
+    setNewsletterError(sendError?.message || 'Could not send newsletter.')
+  } finally {
+    setNewsletterSending(false)
   }
+}
 
   if (!waitingForProfile && !isAdmin) {
     return <Navigate to="/" replace />
