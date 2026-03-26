@@ -37,6 +37,18 @@ const editableImageSlots = [
     aspect: 4 / 3,
     defaultUrl: '',
   },
+  {
+    key: 'services-card-logo-design',
+    label: 'Digital design card',
+    aspect: 4 / 3,
+    defaultUrl: '',
+  },
+  {
+    key: 'services-card-apparel-design',
+    label: 'Apparel design card',
+    aspect: 4 / 3,
+    defaultUrl: '',
+  },
 ]
 
 const createImage = (url) =>
@@ -46,6 +58,14 @@ const createImage = (url) =>
     image.onerror = reject
     image.src = url
   })
+
+const servicesCache = {
+  imagesBySlot: {},
+  settingsBySlot: {},
+  speedInputsBySlot: {},
+  routeDataLoaded: false,
+  routeImagesReady: false,
+}
 
 const getCroppedBlob = async (imageSrc, cropPixels, outputType = 'image/jpeg') => {
   const image = await createImage(imageSrc)
@@ -151,9 +171,9 @@ function ServicesPage() {
   const { user, canEditAsAdmin } = useAuth()
   const isAdmin = canEditAsAdmin === true
 
-  const [imagesBySlot, setImagesBySlot] = useState({})
-  const [settingsBySlot, setSettingsBySlot] = useState({})
-  const [speedInputsBySlot, setSpeedInputsBySlot] = useState({})
+  const [imagesBySlot, setImagesBySlot] = useState(servicesCache.imagesBySlot)
+  const [settingsBySlot, setSettingsBySlot] = useState(servicesCache.settingsBySlot)
+  const [speedInputsBySlot, setSpeedInputsBySlot] = useState(servicesCache.speedInputsBySlot)
   const [activeIndexBySlot, setActiveIndexBySlot] = useState({})
   const [servicesPageAdminError, setServicesPageAdminError] = useState('')
   const [servicesPageAdminMessage, setServicesPageAdminMessage] = useState('')
@@ -171,8 +191,8 @@ function ServicesPage() {
   const [crop, setCrop] = useState({ x: 0, y: 0 })
   const [zoom, setZoom] = useState(1)
   const [croppedAreaPixels, setCroppedAreaPixels] = useState(null)
-  const [routeDataLoaded, setRouteDataLoaded] = useState(false)
-  const [routeImagesReady, setRouteImagesReady] = useState(false)
+  const [routeDataLoaded, setRouteDataLoaded] = useState(servicesCache.routeDataLoaded)
+  const [routeImagesReady, setRouteImagesReady] = useState(servicesCache.routeImagesReady)
 
   const slotByKey = useMemo(
     () =>
@@ -246,11 +266,16 @@ function ServicesPage() {
 
   const isRouteCriticalReady = routeDataLoaded && routeImagesReady
 
-  const loadServicesPageImages = async () => {
-    setRouteDataLoaded(false)
-    setRouteImagesReady(false)
+  const loadServicesPageImages = async ({ silent = false } = {}) => {
+    if (!silent) {
+      setRouteDataLoaded(false)
+      setRouteImagesReady(false)
+      servicesCache.routeDataLoaded = false
+      servicesCache.routeImagesReady = false
+    }
 
     if (!supabaseReady || !supabase) {
+      servicesCache.routeDataLoaded = true
       setRouteDataLoaded(true)
       return
     }
@@ -269,6 +294,7 @@ function ServicesPage() {
       .select('slot_key, speed_ms')
 
     if (error) {
+      servicesCache.routeDataLoaded = true
       setRouteDataLoaded(true)
       return
     }
@@ -282,6 +308,7 @@ function ServicesPage() {
         nextMap[row.slot_key].push(row)
       }
     }
+    servicesCache.imagesBySlot = nextMap
     setImagesBySlot(nextMap)
 
     if (!settingsError) {
@@ -295,15 +322,31 @@ function ServicesPage() {
         nextInputs[slot.key] = String(Math.round(speedMs / 1000))
       }
 
+      servicesCache.settingsBySlot = nextSettings
+      servicesCache.speedInputsBySlot = nextInputs
       setSettingsBySlot(nextSettings)
       setSpeedInputsBySlot(nextInputs)
     }
 
+    servicesCache.routeDataLoaded = true
     setRouteDataLoaded(true)
   }
 
   useEffect(() => {
-    loadServicesPageImages()
+    if (!servicesCache.routeDataLoaded) {
+      loadServicesPageImages()
+      return
+    }
+
+    // Keep cached UI instantly visible on return to this route.
+    setRouteDataLoaded(true)
+    setRouteImagesReady(servicesCache.routeImagesReady)
+    setImagesBySlot(servicesCache.imagesBySlot)
+    setSettingsBySlot(servicesCache.settingsBySlot)
+    setSpeedInputsBySlot(servicesCache.speedInputsBySlot)
+
+    // Refresh from DB in background without flashing the route loader.
+    loadServicesPageImages({ silent: true })
   }, [])
 
   useEffect(() => {
@@ -317,8 +360,16 @@ function ServicesPage() {
         return
       }
 
+      if (servicesCache.routeImagesReady) {
+        if (!cancelled) {
+          setRouteImagesReady(true)
+        }
+        return
+      }
+
       if (routeCriticalImageUrls.length === 0) {
         if (!cancelled) {
+          servicesCache.routeImagesReady = true
           setRouteImagesReady(true)
         }
         return
@@ -331,6 +382,7 @@ function ServicesPage() {
       await Promise.all(routeCriticalImageUrls.map((url) => preloadImage(url)))
 
       if (!cancelled) {
+        servicesCache.routeImagesReady = true
         setRouteImagesReady(true)
       }
     }
@@ -727,7 +779,7 @@ function ServicesPage() {
   const heroItems = resolveSlotItems('services-hero')
   const heroActiveIndex = Math.min(activeIndexBySlot['services-hero'] || 0, Math.max(0, heroItems.length - 1))
 
-  const cardsWithImage = [
+  const primaryCards = [
     {
       title: 'Commission art',
       slotKey: 'services-card-commissioned',
@@ -748,6 +800,23 @@ function ServicesPage() {
       label: 'Canvas art carousel',
       slug: 'canvas-art',
       items: resolveSlotItems('services-card-canvas'),
+    },
+  ]
+
+  const digitalDesignCards = [
+    {
+      title: 'Logo Design',
+      slotKey: 'services-card-logo-design',
+      label: 'Logo design carousel',
+      slug: 'logo-design',
+      items: resolveSlotItems('services-card-logo-design'),
+    },
+    {
+      title: 'Apparel Design',
+      slotKey: 'services-card-apparel-design',
+      label: 'Apparel design carousel',
+      slug: 'apparel-design',
+      items: resolveSlotItems('services-card-apparel-design'),
     },
   ]
 
@@ -806,7 +875,7 @@ function ServicesPage() {
             </p>
           </div>
 
-          <div className="mt-10 grid gap-10 lg:grid-cols-3">
+          <div className="mt-10 grid gap-10 md:grid-cols-2 xl:grid-cols-4">
             <article className="space-y-4">
               <h2 className="display-font text-5xl leading-[0.95] tracking-[0.01em] text-black">Commissioned Art</h2>
               <h3 className="text-3xl font-bold">What Is It?</h3>
@@ -824,7 +893,7 @@ function ServicesPage() {
               </p>
             </article>
 
-            <article className="space-y-4 border-t border-black/25 pt-8 lg:border-t-0 lg:border-l lg:pl-8 lg:pt-0">
+            <article className="space-y-4 border-t border-black/25 pt-8 md:border-t-0 md:border-l md:pl-8 md:pt-0">
               <h2 className="display-font text-5xl leading-[0.95] tracking-[0.01em] text-black">Mural Art</h2>
               <h3 className="text-3xl font-bold">What Is It?</h3>
               <p className="font-serif text-base leading-relaxed text-black/90 sm:text-lg">
@@ -840,7 +909,7 @@ function ServicesPage() {
               </p>
             </article>
 
-            <article className="space-y-4 border-t border-black/25 pt-8 lg:border-t-0 lg:border-l lg:pl-8 lg:pt-0">
+            <article className="space-y-4 border-t border-black/25 pt-8 xl:border-t-0 xl:border-l xl:pl-8 xl:pt-0">
               <h2 className="display-font text-5xl leading-[0.95] tracking-[0.01em] text-black">Canvas Art</h2>
               <h3 className="text-3xl font-bold">What Is It?</h3>
               <p className="font-serif text-base leading-relaxed text-black/90 sm:text-lg">
@@ -855,13 +924,99 @@ function ServicesPage() {
                 giving your space a more personal and elevated feel.
               </p>
             </article>
+
+            <article className="space-y-4 border-t border-black/25 pt-8 xl:border-t-0 xl:border-l xl:pl-8 xl:pt-0">
+              <h2 className="display-font text-5xl leading-[0.95] tracking-[0.01em] text-black">Digital Design</h2>
+              <h3 className="text-3xl font-bold">What Is It?</h3>
+              <p className="font-serif text-base leading-relaxed text-black/90 sm:text-lg">
+                Digital design builds the visual identity of your brand through logo systems, graphic direction, and
+                high-impact assets for digital and print use. This includes custom logo creation, typographic style,
+                and brand visuals designed to look consistent across social media, merchandise, and marketing pieces.
+              </p>
+              <h3 className="text-3xl font-bold">Why It Matters</h3>
+              <p className="font-serif text-base leading-relaxed text-black/90 sm:text-lg">
+                Strong digital design makes your brand instantly recognizable and more professional. Instead of random
+                visuals, you get a clear and unified look that helps people remember your business, trust your quality,
+                and connect emotionally with your message from first impression to final conversion.
+              </p>
+            </article>
           </div>
         </section>
 
         <section className="mx-auto mt-14 w-full max-w-7xl px-5 sm:px-7 lg:px-10">
           <div className="grid gap-6 md:grid-cols-3">
-            {cardsWithImage.map((card) => (
+            {primaryCards.map((card) => (
               <article key={card.title} className="space-y-3">
+                <Link
+                  to={`/services/${card.slug}`}
+                  className="group block cursor-pointer rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#ece9e4]"
+                  aria-label={`Open ${card.title} service page`}
+                >
+                  <div className="relative overflow-hidden border border-black/15 bg-white shadow-[0_12px_28px_rgba(0,0,0,0.1)] transition duration-300 group-hover:-translate-y-1 group-hover:border-black/45 group-hover:shadow-[0_18px_38px_rgba(0,0,0,0.2)] group-focus-visible:-translate-y-1 group-focus-visible:border-black/45 group-focus-visible:shadow-[0_18px_38px_rgba(0,0,0,0.2)]">
+                    <div className="relative h-[340px] w-full">
+                      {card.items.length > 0 ? (
+                        card.items.map((item, index) => {
+                          const activeIndex = Math.min(activeIndexBySlot[card.slotKey] || 0, Math.max(0, card.items.length - 1))
+                          return (
+                            <img
+                              key={item.id || item.image_url}
+                              src={item.image_url}
+                              alt={card.title}
+                              className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-1000 ease-in-out ${
+                                index === activeIndex ? 'opacity-100' : 'opacity-0'
+                              }`}
+                            />
+                          )
+                        })
+                      ) : (
+                        <div className="absolute inset-0 bg-black" />
+                      )}
+
+                      <div className="absolute left-3 top-3 z-10 inline-flex items-center gap-2 rounded-full border border-white/80 bg-black/75 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-white shadow-lg">
+                        Click to open
+                        <FiArrowUpRight size={12} className="transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
+                      </div>
+
+                      <div className="pointer-events-none absolute inset-0 border-2 border-transparent transition duration-300 group-hover:border-white/60 group-focus-visible:border-white/60" />
+
+                      <div className="absolute inset-x-0 bottom-0 bg-[linear-gradient(180deg,transparent,rgba(0,0,0,0.7))] px-4 pb-4 pt-12 text-white opacity-0 transition duration-300 group-hover:opacity-100">
+                        <p className="display-font text-xs tracking-[0.25em]">OPEN SERVICE PAGE</p>
+                      </div>
+
+                      {isAdmin ? (
+                        <button
+                          type="button"
+                          className="absolute right-3 top-3 inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/60 bg-black/65 text-white transition hover:border-white hover:bg-black/85"
+                          onClick={(event) => {
+                            event.preventDefault()
+                            openSlotEditor(card.slotKey)
+                          }}
+                          aria-label={`Edit ${card.title} carousel`}
+                        >
+                          <FiEdit2 size={15} />
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between gap-3">
+                    <h3 className="display-font text-4xl tracking-[0.01em] text-black">{card.title}</h3>
+                    <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-black/70 transition group-hover:text-black">
+                      View details
+                      <FiArrowUpRight size={13} className="transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
+                    </span>
+                  </div>
+                </Link>
+              </article>
+            ))}
+          </div>
+
+          <p className="mt-10 text-center display-font text-xl uppercase tracking-[0.28em] text-black/80 sm:text-2xl">
+            Digital Design
+          </p>
+
+          <div className="mt-6 flex flex-wrap justify-center gap-6">
+            {digitalDesignCards.map((card) => (
+              <article key={card.title} className="w-full space-y-3 md:w-[calc((100%-3rem)/3)]">
                 <Link
                   to={`/services/${card.slug}`}
                   className="group block cursor-pointer rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#ece9e4]"

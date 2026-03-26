@@ -262,7 +262,7 @@ function SiteHeader({
               MURALS
             </a>
             <a href="#digital-design" className="story-link" onClick={handleSectionNav('#digital-design')}>
-              DIGITAL
+              DIGITAL DESIGN
             </a>
             <Link to="/contact" className="story-link">
               CONTACT
@@ -330,7 +330,7 @@ function SiteHeader({
               className="border border-white/10 p-4 font-display text-[0.8rem] uppercase tracking-[0.18em] text-white/90 active:bg-white/5"
               onClick={handleSectionNav('#digital-design')}
             >
-              DIGITAL
+              DIGITAL DESIGN
             </a>
             <Link
               to="/contact"

@@ -64,6 +64,7 @@ function ContactPage() {
     services: [],
     budget: '',
     howHeard: '',
+    howHeardOther: '',
     message: '',
   })
   const [loading, setLoading] = useState(false)
@@ -148,38 +149,81 @@ function ContactPage() {
         const arr = f.services.includes(value) ? f.services.filter(s => s !== value) : [...f.services, value]
         return { ...f, services: arr }
       })
+    } else if (name === 'budget') {
+      const numericOnly = value.replace(/\D/g, '')
+      setForm((f) => ({ ...f, budget: numericOnly }))
+    } else if (name === 'howHeard') {
+      setForm((f) => ({
+        ...f,
+        howHeard: value,
+        howHeardOther: value === 'other' ? f.howHeardOther : '',
+      }))
     } else {
       setForm((f) => ({ ...f, [name]: value }))
     }
   }
 
-  const handleSubmit = async (e) => {
+ const handleSubmit = async (e) => {
   e.preventDefault()
   setLoading(true)
   setError('')
   setSuccess(false)
 
   try {
-    const { data, error } = await supabase.functions.invoke('dynamic-endpoint', {
-      body: form,
+    const normalizedBudget = form.budget.trim() ? `$${form.budget.trim()}` : ''
+    const normalizedHowHeard =
+      form.howHeard === 'other'
+        ? (form.howHeardOther.trim() ? `other - ${form.howHeardOther.trim()}` : 'other')
+        : form.howHeard
+
+    const { error: functionError } = await supabase.functions.invoke('dynamic-endpoint', {
+      body: {
+        ...form,
+        budget: normalizedBudget,
+        howHeard: normalizedHowHeard,
+      },
     })
 
-    if (!error) {
-      setSuccess(true)
-      setForm({
-        firstName: '',
-        lastName: '',
-        email: '',
-        newsletter: false,
-        phone: '',
-        services: [],
-        budget: '',
-        howHeard: '',
-        message: '',
-      })
-    } else {
-      setError(error.message || 'Error sending message')
+    if (functionError) {
+      setError(functionError.message || 'Error sending message')
+      return
     }
+
+    if (form.newsletter) {
+      const { error: subscribeError } = await supabase
+        .schema('app')
+        .from('newsletter_subscribers')
+        .insert({
+          email: form.email.trim().toLowerCase(),
+          source: 'contact-form',
+        })
+
+      if (subscribeError) {
+        const duplicate =
+          subscribeError.code === '23505' ||
+          subscribeError.message?.toLowerCase().includes('duplicate')
+
+        if (!duplicate) {
+          setError('Message sent, but newsletter subscription could not be completed.')
+          setSuccess(true)
+          return
+        }
+      }
+    }
+
+    setSuccess(true)
+    setForm({
+      firstName: '',
+      lastName: '',
+      email: '',
+      newsletter: false,
+      phone: '',
+      services: [],
+      budget: '',
+      howHeard: '',
+      howHeardOther: '',
+      message: '',
+    })
   } catch (err) {
     setError('Network error')
   } finally {
@@ -187,7 +231,7 @@ function ContactPage() {
   }
 }
   return (
-    <div className="min-h-screen bg-[#fffdfa] text-[#1a1a1a] selection:bg-black selection:text-white flex flex-col">
+    <div className="contact-page min-h-screen bg-[#fffdfa] text-[#1a1a1a] selection:bg-black selection:text-white flex flex-col">
       <SiteHeader />
       <main className="mx-auto w-full max-w-[1600px] px-6 sm:px-10 lg:px-16 pt-16 lg:pt-24 flex-1">
         
@@ -252,8 +296,35 @@ function ContactPage() {
                     <input name="services" type="checkbox" value="Canvas Art" checked={form.services.includes('Canvas Art')} onChange={handleChange} className="h-4 w-4 rounded-sm border-black/40 cursor-pointer text-black" />
                     <span>Canvas Art</span>
                   </label>
+                  <label className="inline-flex items-center gap-2 cursor-pointer">
+                    <input name="services" type="checkbox" value="Logo" checked={form.services.includes('Logo')} onChange={handleChange} className="h-4 w-4 rounded-sm border-black/40 cursor-pointer text-black" />
+                    <span>Logo</span>
+                  </label>
+                  <label className="inline-flex items-center gap-2 cursor-pointer">
+                    <input name="services" type="checkbox" value="Apparel Design" checked={form.services.includes('Apparel Design')} onChange={handleChange} className="h-4 w-4 rounded-sm border-black/40 cursor-pointer text-black" />
+                    <span>Apparel Design</span>
+                  </label>
                 </div>
               </fieldset>
+
+              <label className="grid gap-1 text-[14px]">
+                <span className="text-black/60">What is your budget?</span>
+                <div className="relative">
+                  <span className="pointer-events-none absolute inset-y-0 left-2 flex items-center text-[15px] text-black/70 font-sans">
+                    $
+                  </span>
+                  <input
+                    name="budget"
+                    value={form.budget}
+                    onChange={handleChange}
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    placeholder="0"
+                    className="w-full border-b border-black/40 bg-transparent pl-7 pr-2 py-3 hover:border-black/70 outline-none focus:border-black transition font-sans text-[15px]"
+                  />
+                </div>
+              </label>
 
               <label className="grid gap-1 text-[14px]">
                 <span className="text-black/60">How did you hear about me?</span>
@@ -269,6 +340,17 @@ function ContactPage() {
                     <svg className="h-4 w-4 text-black/60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
                   </div>
                 </div>
+                {form.howHeard === 'other' && (
+                  <input
+                    name="howHeardOther"
+                    type="text"
+                    value={form.howHeardOther}
+                    onChange={handleChange}
+                    placeholder="Tell me where you found me"
+                    required
+                    className="border-b border-black/40 bg-transparent px-2 py-3 hover:border-black/70 outline-none focus:border-black transition font-sans text-[15px] mt-3"
+                  />
+                )}
               </label>
 
               <label className="grid gap-1 text-[14px]">

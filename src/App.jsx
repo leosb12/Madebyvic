@@ -143,6 +143,24 @@ const subscribeOfferSlots = [
   { key: 'subscribe-offer-bottom', label: 'OFFER PREVIEW 02', ratio: 'aspect-[16/10]' },
 ]
 
+const globalCache = {
+  bannerItems: [],
+  bannerSpeedMs: defaultBannerSpeedMs,
+  speedInputSeconds: String(Math.round(defaultBannerSpeedMs / 1000)),
+  heroIntroText: defaultHeroIntroText,
+  heroIntroInput: defaultHeroIntroText,
+  serviceImagesByKey: {},
+  aboutTitle: defaultAboutTitle,
+  aboutBody: defaultAboutBody,
+  aboutTitleInput: defaultAboutTitle,
+  aboutBodyInput: defaultAboutBody,
+  aboutImageUrl: '',
+  instagramLinksByKey: {},
+  homeAnnouncements: [],
+  hasInitialDataLoaded: false,
+  initialImagesLoaded: false,
+}
+
 const buildUniqueFileName = (fileName, existingNames) => {
   const dotIndex = fileName.lastIndexOf('.')
   const base = dotIndex > 0 ? fileName.slice(0, dotIndex) : fileName
@@ -327,8 +345,8 @@ function SectionIntro({ tag, title, children }) {
 function App() {
   const [activeBanner, setActiveBanner] = useState(0)
   const [isHeaderMobileMenuOpen, setIsHeaderMobileMenuOpen] = useState(false)
-  const [bannerItems, setBannerItems] = useState([])
-  const [bannerSpeedMs, setBannerSpeedMs] = useState(defaultBannerSpeedMs)
+  const [bannerItems, setBannerItems] = useState(globalCache.bannerItems)
+  const [bannerSpeedMs, setBannerSpeedMs] = useState(globalCache.bannerSpeedMs)
   const [loadingBannerConfig, setLoadingBannerConfig] = useState(false)
   const [savingBannerConfig, setSavingBannerConfig] = useState(false)
   const [uploadingBannerFile, setUploadingBannerFile] = useState(false)
@@ -339,14 +357,14 @@ function App() {
   const [crop, setCrop] = useState({ x: 0, y: 0 })
   const [zoom, setZoom] = useState(1)
   const [croppedAreaPixels, setCroppedAreaPixels] = useState(null)
-  const [speedInputSeconds, setSpeedInputSeconds] = useState(String(Math.round(defaultBannerSpeedMs / 1000)))
+  const [speedInputSeconds, setSpeedInputSeconds] = useState(globalCache.speedInputSeconds)
   const [bannerAdminMessage, setBannerAdminMessage] = useState('')
   const [bannerAdminError, setBannerAdminError] = useState('')
   const [showBannerAdmin, setShowBannerAdmin] = useState(false)
   const [bannerPage, setBannerPage] = useState(1)
   const [previewBannerUrl, setPreviewBannerUrl] = useState('')
   const [previewBannerName, setPreviewBannerName] = useState('')
-  const [serviceImagesByKey, setServiceImagesByKey] = useState({})
+  const [serviceImagesByKey, setServiceImagesByKey] = useState(globalCache.serviceImagesByKey)
   const [savingServiceImageKey, setSavingServiceImageKey] = useState('')
   const [serviceAdminMessage, setServiceAdminMessage] = useState('')
   const [serviceAdminError, setServiceAdminError] = useState('')
@@ -357,20 +375,20 @@ function App() {
   const [serviceCrop, setServiceCrop] = useState({ x: 0, y: 0 })
   const [serviceZoom, setServiceZoom] = useState(1)
   const [serviceCroppedAreaPixels, setServiceCroppedAreaPixels] = useState(null)
-  const [heroIntroText, setHeroIntroText] = useState(defaultHeroIntroText)
-  const [heroIntroInput, setHeroIntroInput] = useState(defaultHeroIntroText)
+  const [heroIntroText, setHeroIntroText] = useState(globalCache.heroIntroText)
+  const [heroIntroInput, setHeroIntroInput] = useState(globalCache.heroIntroInput)
   const [savingHeroIntro, setSavingHeroIntro] = useState(false)
   const [showHeroTextEditor, setShowHeroTextEditor] = useState(false)
-  const [aboutTitle, setAboutTitle] = useState(defaultAboutTitle)
-  const [aboutBody, setAboutBody] = useState(defaultAboutBody)
-  const [aboutImageUrl, setAboutImageUrl] = useState('')
-  const [aboutTitleInput, setAboutTitleInput] = useState(defaultAboutTitle)
-  const [aboutBodyInput, setAboutBodyInput] = useState(defaultAboutBody)
+  const [aboutTitle, setAboutTitle] = useState(globalCache.aboutTitle)
+  const [aboutBody, setAboutBody] = useState(globalCache.aboutBody)
+  const [aboutImageUrl, setAboutImageUrl] = useState(globalCache.aboutImageUrl)
+  const [aboutTitleInput, setAboutTitleInput] = useState(globalCache.aboutTitleInput)
+  const [aboutBodyInput, setAboutBodyInput] = useState(globalCache.aboutBodyInput)
   const [savingAboutContent, setSavingAboutContent] = useState(false)
   const [showAboutEditor, setShowAboutEditor] = useState(false)
   const [aboutAdminMessage, setAboutAdminMessage] = useState('')
   const [aboutAdminError, setAboutAdminError] = useState('')
-  const [instagramLinksByKey, setInstagramLinksByKey] = useState({})
+  const [instagramLinksByKey, setInstagramLinksByKey] = useState(globalCache.instagramLinksByKey)
   const [showInstagramLinkEditor, setShowInstagramLinkEditor] = useState(false)
   const [editingInstagramKey, setEditingInstagramKey] = useState('')
   const [instagramLinkInput, setInstagramLinkInput] = useState('')
@@ -381,9 +399,9 @@ function App() {
   const [subscribing, setSubscribing] = useState(false)
   const [subscribeError, setSubscribeError] = useState('')
   const [subscribeMessage, setSubscribeMessage] = useState('')
-  const [homeAnnouncements, setHomeAnnouncements] = useState([])
-  const [hasInitialDataLoaded, setHasInitialDataLoaded] = useState(false)
-  const [initialImagesLoaded, setInitialImagesLoaded] = useState(false)
+  const [homeAnnouncements, setHomeAnnouncements] = useState(globalCache.homeAnnouncements)
+  const [hasInitialDataLoaded, setHasInitialDataLoaded] = useState(globalCache.hasInitialDataLoaded)
+  const [initialImagesLoaded, setInitialImagesLoaded] = useState(globalCache.initialImagesLoaded)
   const [apparelBlendValue, setApparelBlendValue] = useState(0)
   const bannerFileInputRef = useRef(null)
   const reviewsSliderRef = useRef(null)
@@ -637,17 +655,22 @@ function App() {
     const hasBannerRows = !imagesResponse.error && Array.isArray(imagesResponse.data)
     const nextBannerItems = hasBannerRows ? imagesResponse.data : []
     if (hasBannerRows) {
+      globalCache.bannerItems = nextBannerItems
       setBannerItems(nextBannerItems)
     }
 
     if (!settingsResponse.error && settingsResponse.data?.rotation_interval_ms) {
       const safeSpeed = Math.max(1200, Number(settingsResponse.data.rotation_interval_ms) || defaultBannerSpeedMs)
+      globalCache.bannerSpeedMs = safeSpeed
+      globalCache.speedInputSeconds = String(Math.round(safeSpeed / 1000))
       setBannerSpeedMs(safeSpeed)
       setSpeedInputSeconds(String(Math.round(safeSpeed / 1000)))
     }
 
     if (!introResponse.error && introResponse.data?.intro_text) {
       const intro = String(introResponse.data.intro_text)
+      globalCache.heroIntroText = intro
+      globalCache.heroIntroInput = intro
       setHeroIntroText(intro)
       setHeroIntroInput(intro)
     }
@@ -659,6 +682,7 @@ function App() {
           nextServiceImagesMap[row.service_key] = row
         }
       }
+      globalCache.serviceImagesByKey = nextServiceImagesMap
       setServiceImagesByKey(nextServiceImagesMap)
     }
 
@@ -667,6 +691,11 @@ function App() {
       const nextTitle = String(aboutResponse.data.about_title || defaultAboutTitle)
       const nextBody = String(aboutResponse.data.about_body || defaultAboutBody)
       const nextImageUrl = String(aboutResponse.data.image_url || '')
+      globalCache.aboutTitle = nextTitle
+      globalCache.aboutBody = nextBody
+      globalCache.aboutTitleInput = nextTitle
+      globalCache.aboutBodyInput = nextBody
+      globalCache.aboutImageUrl = nextImageUrl
       setAboutTitle(nextTitle)
       setAboutBody(nextBody)
       setAboutTitleInput(nextTitle)
@@ -682,16 +711,18 @@ function App() {
           nextLinksMap[row.slot_key] = row?.post_url || ''
         }
       }
+      globalCache.instagramLinksByKey = nextLinksMap
       setInstagramLinksByKey(nextLinksMap)
     }
 
     if (!announcementsResponse?.error && Array.isArray(announcementsResponse?.data)) {
-      setHomeAnnouncements(
-        announcementsResponse.data
+      const ann = announcementsResponse.data
           .filter((item) => item?.is_active)
-          .map((item) => ({ id: item.id, message: String(item.message || '') })),
-      )
+          .map((item) => ({ id: item.id, message: String(item.message || '') }))
+      globalCache.homeAnnouncements = ann
+      setHomeAnnouncements(ann)
     } else {
+      globalCache.homeAnnouncements = []
       setHomeAnnouncements([])
     }
 
@@ -709,25 +740,36 @@ function App() {
     let isMounted = true
 
     const initializeHomeData = async () => {
-      setInitialImagesLoaded(false)
+      // Si ya hay preload, no deshabilites la vista inicial
+      if (!globalCache.initialImagesLoaded) {
+        setInitialImagesLoaded(false)
+      }
 
       const initialUrls = await loadBannerConfig()
       if (!isMounted) {
         return
       }
 
-      if (initialUrls.length > 0) {
+      if (!globalCache.initialImagesLoaded && initialUrls.length > 0) {
         await Promise.all(initialUrls.map((url) => preloadImage(url)))
         if (!isMounted) {
           return
         }
       }
 
+      globalCache.initialImagesLoaded = true
+      globalCache.hasInitialDataLoaded = true
       setInitialImagesLoaded(true)
       setHasInitialDataLoaded(true)
     }
 
-    initializeHomeData()
+    if (!globalCache.hasInitialDataLoaded) {
+      initializeHomeData()
+    } else {
+      // Already loaded, just run it quietly in background to refresh if things changed in db, 
+      // but without showing load indicators
+      loadBannerConfig()
+    }
 
     return () => {
       isMounted = false

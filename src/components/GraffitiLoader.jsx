@@ -5,12 +5,9 @@ function GraffitiLoader({ isVisible }) {
 
   return (
     <div className="graffiti-loader" role="status" aria-live="polite" aria-label="Loading page assets">
-      <div className="graffiti-loader__noise" />
-      <div className="graffiti-loader__paint" />
-      <div className="graffiti-loader__content">
-        <p className="graffiti-loader__tag">Digital Art Gallery</p>
-        <h2 className="graffiti-loader__wordmark">MADE BY VIC</h2>
-        <div className="graffiti-loader__inkline" />
+      <img src="/logo1.png" alt="Made by Vic" className="brand-loader-logo" />
+      <div className="brand-loader-progress">
+        <div className="brand-loader-progress-bar" />
       </div>
     </div>
   )

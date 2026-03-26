@@ -78,12 +78,22 @@ const hasPendingCriticalImages = () => {
   return images.some((img) => !img.complete)
 }
 
+const visitedPaths = new Set()
+
 function GlobalRouteLoader() {
   const location = useLocation()
-  const [isVisible, setIsVisible] = useState(true)
+  const [isVisible, setIsVisible] = useState(() => !visitedPaths.has(location.pathname))
   const runIdRef = useRef(0)
 
   useEffect(() => {
+    const currentPath = location.pathname
+
+    // If we already loaded this path before, don't show the loading screen again
+    if (visitedPaths.has(currentPath)) {
+      setIsVisible(false)
+      return
+    }
+
     const runId = runIdRef.current + 1
     runIdRef.current = runId
     setIsVisible(true)
@@ -177,6 +187,7 @@ function GlobalRouteLoader() {
 
       if (isCurrentRun()) {
         setIsVisible(false)
+        visitedPaths.add(currentPath)
       }
     }
 
@@ -185,7 +196,7 @@ function GlobalRouteLoader() {
     return () => {
       isCancelled = true
     }
-  }, [location.pathname, location.search, location.hash])
+  }, [location.pathname])
 
   return <GraffitiLoader isVisible={isVisible} />
 }
