@@ -136,7 +136,7 @@ function AuthPage() {
       return
     }
 
-    setSuccess('If this email exists, a password reset link has been sent.')
+    setSuccess('If this email exists, a password reset link has been sent. Please check your inbox and spam folder.')
     setLoading(false)
   }
 
