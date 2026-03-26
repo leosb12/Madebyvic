@@ -1,11 +1,27 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Masonry from 'react-masonry-css'
 import {
+  DndContext,
+  PointerSensor,
+  TouchSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  arrayMove,
+  rectSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+import {
   FiUploadCloud,
   FiX,
   FiChevronLeft,
   FiChevronRight,
   FiMove,
+  FiTrash2,
 } from 'react-icons/fi'
 import SiteHeader from '../components/SiteHeader'
 import SiteFooter from '../components/SiteFooter'
@@ -60,13 +76,6 @@ const getImageSize = (file) =>
     image.src = objectUrl
   })
 
-const arrayMove = (array, fromIndex, toIndex) => {
-  const next = [...array]
-  const [moved] = next.splice(fromIndex, 1)
-  next.splice(toIndex, 0, moved)
-  return next
-}
-
 const getAspectRatio = (item) => {
   const width = Number(item?.width || 0)
   const height = Number(item?.height || 0)
@@ -103,29 +112,40 @@ const getReducedRatioKey = (item) => {
 
 const isLandscape = (item) => getAspectRatio(item) > 1
 
+const areRatiosVerySimilar = (firstItem, secondItem) => {
+  const ratioA = getAspectRatio(firstItem)
+  const ratioB = getAspectRatio(secondItem)
+
+  if (!ratioA || !ratioB) {
+    return false
+  }
+
+  // Symmetric tolerance for close ratios (for example 1:1 with 0.97:1).
+  const normalizedDifference = Math.abs(Math.log(ratioA / ratioB))
+  return normalizedDifference <= 0.08
+}
+
 const buildMobileRows = (orderedImages) => {
   const rows = []
-  const pending = [...orderedImages]
 
-  while (pending.length > 0) {
-    const current = pending.shift()
+  for (let index = 0; index < orderedImages.length; index += 1) {
+    const current = orderedImages[index]
+    const next = orderedImages[index + 1]
+
     if (!current) {
-      break
-    }
-
-    if (isLandscape(current)) {
-      rows.push({ type: 'single', items: [current] })
       continue
     }
 
-    const currentRatioKey = getReducedRatioKey(current)
-    const matchIndex = pending.findIndex(
-      (item) => !isLandscape(item) && getReducedRatioKey(item) === currentRatioKey,
-    )
-
-    if (matchIndex !== -1) {
-      const [matched] = pending.splice(matchIndex, 1)
-      rows.push({ type: 'pair', items: [current, matched] })
+    // Respect manual order: only adjacent images can form a 2x2 pair.
+    if (
+      next &&
+      !isLandscape(current) &&
+      !isLandscape(next) &&
+      (getReducedRatioKey(current) === getReducedRatioKey(next) ||
+        areRatiosVerySimilar(current, next))
+    ) {
+      rows.push({ type: 'pair', items: [current, next] })
+      index += 1
       continue
     }
 
@@ -133,6 +153,64 @@ const buildMobileRows = (orderedImages) => {
   }
 
   return rows
+}
+
+function SortableManagerItem({ image, index, isDeleting, onDelete }) {
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } =
+    useSortable({ id: image.id })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 40 : 1,
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`group overflow-hidden rounded-[20px] border bg-[#faf8f2] transition ${
+        isDragging ? 'border-black/30 opacity-70 shadow-[0_20px_45px_rgba(0,0,0,0.18)]' : 'border-black/10 hover:border-black/25'
+      }`}
+    >
+      <div className="relative">
+        <img src={image.image_url} alt={`Reorder item ${index + 1}`} className="h-36 w-full object-cover sm:h-40" />
+
+        <div className="absolute left-3 top-3 rounded-full bg-black/75 px-3 py-1 text-[10px] uppercase tracking-[0.22em] text-white">
+          #{index + 1}
+        </div>
+
+        <button
+          ref={setActivatorNodeRef}
+          type="button"
+          {...attributes}
+          {...listeners}
+          className="absolute right-3 top-3 flex h-9 w-9 touch-none items-center justify-center rounded-full bg-white/90 text-[#111111] shadow-sm cursor-grab active:cursor-grabbing"
+          aria-label="Drag to reorder"
+        >
+          <FiMove />
+        </button>
+
+        <button
+          type="button"
+          onClick={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            onDelete(image)
+          }}
+          className="absolute bottom-3 right-3 inline-flex h-9 w-9 items-center justify-center rounded-full border border-red-500/30 bg-white/95 text-red-600 shadow-sm transition hover:bg-red-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+          aria-label="Delete image"
+          disabled={isDeleting}
+        >
+          <FiTrash2 />
+        </button>
+      </div>
+
+      <div className="px-3 py-3">
+        <p className="text-[11px] uppercase tracking-[0.18em] text-black/45">Ratio group {getReducedRatioKey(image)}</p>
+      </div>
+    </div>
+  )
 }
 
 function GalleryPage() {
@@ -143,12 +221,19 @@ function GalleryPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isUploading, setIsUploading] = useState(false)
   const [isSavingOrder, setIsSavingOrder] = useState(false)
+  const [deletingImageId, setDeletingImageId] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
   const [lightboxIndex, setLightboxIndex] = useState(null)
   const [showUploadPanel, setShowUploadPanel] = useState(false)
   const [managerImages, setManagerImages] = useState([])
+  const [managerInitialImages, setManagerInitialImages] = useState([])
   const [draggedId, setDraggedId] = useState(null)
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 120, tolerance: 8 } }),
+  )
 
   const canUpload = Boolean(user)
 
@@ -220,8 +305,13 @@ function GalleryPage() {
   }, [lightboxIndex])
 
   useEffect(() => {
+    if (!showUploadPanel) {
+      return
+    }
+
     setManagerImages(sortedImages)
-  }, [sortedImages])
+    setManagerInitialImages(sortedImages)
+  }, [sortedImages, showUploadPanel])
 
   const loadImages = async () => {
     setErrorMessage('')
@@ -235,7 +325,7 @@ function GalleryPage() {
     const { data, error } = await supabase
       .schema('app')
       .from('gallery_images')
-      .select('id, image_url, width, height, sort_order, created_at, created_by')
+      .select('id, image_url, storage_path, width, height, sort_order, created_at, created_by')
       .eq('is_active', true)
       .order('sort_order', { ascending: false })
       .order('created_at', { ascending: false })
@@ -346,7 +436,7 @@ function GalleryPage() {
             is_active: true,
             sort_order: nextSortOrder,
           })
-          .select('id, image_url, width, height, sort_order, created_at, created_by')
+          .select('id, image_url, storage_path, width, height, sort_order, created_at, created_by')
           .single()
 
         if (insertError) {
@@ -377,24 +467,30 @@ function GalleryPage() {
     }
   }
 
-  const handleDragStart = (id) => {
-    setDraggedId(id)
+  const handleDragStart = (event) => {
+    setDraggedId(String(event.active.id))
     setErrorMessage('')
     setSuccessMessage('')
   }
 
-  const handleDragOver = (event) => {
-    event.preventDefault()
-  }
+  const handleDragEnd = (event) => {
+    const { active, over } = event
 
-  const handleDrop = (targetId) => {
-    if (!draggedId || draggedId === targetId) {
+    if (!active?.id || !over?.id) {
       setDraggedId(null)
       return
     }
 
-    const fromIndex = managerImages.findIndex((item) => item.id === draggedId)
-    const toIndex = managerImages.findIndex((item) => item.id === targetId)
+    const activeId = String(active.id)
+    const overId = String(over.id)
+
+    if (activeId === overId) {
+      setDraggedId(null)
+      return
+    }
+
+    const fromIndex = managerImages.findIndex((item) => item.id === activeId)
+    const toIndex = managerImages.findIndex((item) => item.id === overId)
 
     if (fromIndex === -1 || toIndex === -1) {
       setDraggedId(null)
@@ -405,7 +501,7 @@ function GalleryPage() {
     setDraggedId(null)
   }
 
-  const handleDragEnd = () => {
+  const handleDragCancel = () => {
     setDraggedId(null)
   }
 
@@ -455,10 +551,69 @@ function GalleryPage() {
   }
 
   const resetManualOrder = () => {
-    setManagerImages(sortedImages)
+    setManagerImages(managerInitialImages)
     setDraggedId(null)
     setErrorMessage('')
     setSuccessMessage('')
+  }
+
+  const handleDeleteImage = async (image) => {
+    if (!image?.id || !canUpload || !supabaseReady || !supabase) {
+      return
+    }
+
+    const approved = window.confirm('Delete this image permanently from gallery and storage?')
+    if (!approved) {
+      return
+    }
+
+    setDeletingImageId(image.id)
+    setErrorMessage('')
+    setSuccessMessage('')
+
+    try {
+      const { error: deleteRowError } = await supabase
+        .schema('app')
+        .from('gallery_images')
+        .delete()
+        .eq('id', image.id)
+
+      if (deleteRowError) {
+        throw new Error(deleteRowError.message || 'Could not delete image record.')
+      }
+
+      if (image.storage_path) {
+        const { error: deleteObjectError } = await supabase.storage
+          .from(galleryBucket)
+          .remove([image.storage_path])
+
+        if (deleteObjectError) {
+          throw new Error(deleteObjectError.message || 'Image record deleted, but storage cleanup failed.')
+        }
+      }
+
+      setImages((prev) => prev.filter((item) => item.id !== image.id))
+      setManagerImages((prev) => prev.filter((item) => item.id !== image.id))
+      setManagerInitialImages((prev) => prev.filter((item) => item.id !== image.id))
+      setDraggedId((prev) => (prev === image.id ? null : prev))
+      setLightboxIndex((current) => {
+        if (current === null) {
+          return null
+        }
+
+        const active = sortedImages[current]
+        if (active?.id === image.id) {
+          return null
+        }
+
+        return current
+      })
+      setSuccessMessage('Image deleted successfully from gallery and storage.')
+    } catch (error) {
+      setErrorMessage(error?.message || 'Could not delete image.')
+    } finally {
+      setDeletingImageId('')
+    }
   }
 
   return (
@@ -569,45 +724,31 @@ function GalleryPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-                  {managerImages.map((image, index) => (
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragStart={handleDragStart}
+                  onDragEnd={handleDragEnd}
+                  onDragCancel={handleDragCancel}
+                >
+                  <SortableContext items={managerImages.map((image) => image.id)} strategy={rectSortingStrategy}>
                     <div
-                      key={`manager-${image.id}`}
-                      draggable
-                      onDragStart={() => handleDragStart(image.id)}
-                      onDragOver={handleDragOver}
-                      onDrop={() => handleDrop(image.id)}
-                      onDragEnd={handleDragEnd}
-                      className={`group overflow-hidden rounded-[20px] border bg-[#faf8f2] transition ${
-                        draggedId === image.id
-                          ? 'scale-[0.98] border-black/30 opacity-60'
-                          : 'border-black/10 hover:border-black/25'
+                      className={`grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 ${
+                        draggedId ? 'cursor-grabbing' : 'cursor-default'
                       }`}
                     >
-                      <div className="relative">
-                        <img
-                          src={image.image_url}
-                          alt={`Reorder item ${index + 1}`}
-                          className="h-36 w-full object-cover sm:h-40"
+                      {managerImages.map((image, index) => (
+                        <SortableManagerItem
+                          key={`manager-${image.id}`}
+                          image={image}
+                          index={index}
+                          isDeleting={deletingImageId === image.id}
+                          onDelete={handleDeleteImage}
                         />
-
-                        <div className="absolute left-3 top-3 rounded-full bg-black/75 px-3 py-1 text-[10px] uppercase tracking-[0.22em] text-white">
-                          #{index + 1}
-                        </div>
-
-                        <div className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-white/90 text-[#111111] shadow-sm">
-                          <FiMove />
-                        </div>
-                      </div>
-
-                      <div className="px-3 py-3">
-                        <p className="text-[11px] uppercase tracking-[0.18em] text-black/45">
-                          Ratio group {getReducedRatioKey(image)}
-                        </p>
-                      </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </SortableContext>
+                </DndContext>
               </div>
             ) : null}
           </section>
