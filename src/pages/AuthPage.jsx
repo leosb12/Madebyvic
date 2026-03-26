@@ -509,6 +509,7 @@ function AuthPage() {
                 </ul>
                 <p className="auth-register-note">
                   Already have an account?
+                  {' '}
                   <button type="button" className="auth-inline-btn" onClick={() => switchMode('signin')}>
                     Sign in here
                   </button>

@@ -403,7 +403,10 @@ function App() {
   const [hasInitialDataLoaded, setHasInitialDataLoaded] = useState(globalCache.hasInitialDataLoaded)
   const [initialImagesLoaded, setInitialImagesLoaded] = useState(globalCache.initialImagesLoaded)
   const [apparelBlendValue, setApparelBlendValue] = useState(0)
+  const [showApparelSlotPicker, setShowApparelSlotPicker] = useState(false)
   const bannerFileInputRef = useRef(null)
+  const apparelFirstInputRef = useRef(null)
+  const apparelSecondInputRef = useRef(null)
   const reviewsSliderRef = useRef(null)
   const reviewsIsDraggingRef = useRef(false)
   const reviewsScrollPausedRef = useRef(false)
@@ -1275,6 +1278,9 @@ function App() {
     setServiceZoom(1)
     setServiceCroppedAreaPixels(null)
     setShowServiceCropModal(true)
+    if (serviceKey.startsWith('apparel-mockup-')) {
+      setShowApparelSlotPicker(false)
+    }
     event.target.value = ''
   }
 
@@ -2407,16 +2413,57 @@ function App() {
                       </div>
                     )}
                     {isAdmin && apparelMockups[activeApparelIndex] ? (
-                      <label className="absolute right-3 top-3 inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-sm border border-white/30 bg-black/55 text-white transition hover:border-white/70 hover:bg-black/80">
-                        <FiEdit2 size={16} />
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="sr-only"
-                          onChange={(event) => handleServiceImageUpload(apparelMockups[activeApparelIndex].key, event)}
-                          disabled={savingServiceImageKey === apparelMockups[activeApparelIndex].key}
-                        />
-                      </label>
+                      <>
+                        <button
+                          type="button"
+                          className="absolute right-3 top-3 inline-flex h-10 w-10 items-center justify-center rounded-sm border border-white/30 bg-black/55 text-white transition hover:border-white/70 hover:bg-black/80"
+                          onClick={() => setShowApparelSlotPicker((prev) => !prev)}
+                          aria-label="Choose apparel image slot"
+                          title="Change apparel image"
+                        >
+                          <FiEdit2 size={16} />
+                        </button>
+
+                        {showApparelSlotPicker ? (
+                          <div className="absolute left-3 right-3 top-3 z-20 rounded-sm border border-white/20 bg-black/85 p-3 backdrop-blur">
+                            <p className="display-font text-[10px] uppercase tracking-[0.2em] text-white/70">
+                              Select Transition Image
+                            </p>
+                            <div className="mt-3 grid gap-2">
+                              <label className="inline-flex cursor-pointer items-center justify-center rounded-sm border border-white/25 bg-white/[0.04] px-3 py-2 text-[10px] uppercase tracking-[0.16em] text-white transition hover:border-white/65 hover:bg-white/[0.08]">
+                                First image
+                                <input
+                                  ref={apparelFirstInputRef}
+                                  type="file"
+                                  accept="image/*"
+                                  className="sr-only"
+                                  onChange={(event) => handleServiceImageUpload('apparel-mockup-01', event)}
+                                  disabled={savingServiceImageKey === 'apparel-mockup-01'}
+                                />
+                              </label>
+
+                              <label className="inline-flex cursor-pointer items-center justify-center rounded-sm border border-white/25 bg-white/[0.04] px-3 py-2 text-[10px] uppercase tracking-[0.16em] text-white transition hover:border-white/65 hover:bg-white/[0.08]">
+                                Second image
+                                <input
+                                  ref={apparelSecondInputRef}
+                                  type="file"
+                                  accept="image/*"
+                                  className="sr-only"
+                                  onChange={(event) => handleServiceImageUpload('apparel-mockup-02', event)}
+                                  disabled={savingServiceImageKey === 'apparel-mockup-02'}
+                                />
+                              </label>
+                            </div>
+                            <button
+                              type="button"
+                              className="mt-3 w-full rounded-sm border border-white/20 px-3 py-2 text-[10px] uppercase tracking-[0.16em] text-white/85 transition hover:border-white/60"
+                              onClick={() => setShowApparelSlotPicker(false)}
+                            >
+                              Close
+                            </button>
+                          </div>
+                        ) : null}
+                      </>
                     ) : null}
                   </div>
                   

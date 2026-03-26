@@ -261,15 +261,15 @@ function SiteHeader({
             <Link to="/gallery" className="story-link">
               GALLERY
             </Link>
-            <a href="#murals" className="story-link" onClick={handleSectionNav('#murals')}>
-              MURALS
-            </a>
-            <a href="#digital-design" className="story-link" onClick={handleSectionNav('#digital-design')}>
-              DIGITAL DESIGN
-            </a>
             <Link to="/contact" className="story-link">
               CONTACT
             </Link>
+            <a href="#digital-design" className="story-link" onClick={handleSectionNav('#digital-design')}>
+              DIGITAL DESIGN
+            </a>
+            <a href="#murals" className="story-link" onClick={handleSectionNav('#murals')}>
+              MURALS
+            </a>
 
             {isAdmin ? (
               <Link to="/admin/announcements" className="story-link" onClick={closeMobileMenu}>
@@ -321,27 +321,6 @@ function SiteHeader({
             >
               SERVICES
             </Link>
-            <a
-              href="#murals"
-              className="border border-white/10 p-4 font-display text-[0.8rem] uppercase tracking-[0.18em] text-white/90 active:bg-white/5"
-              onClick={handleSectionNav('#murals')}
-            >
-              MURALS
-            </a>
-            <a
-              href="#digital-design"
-              className="border border-white/10 p-4 font-display text-[0.8rem] uppercase tracking-[0.18em] text-white/90 active:bg-white/5"
-              onClick={handleSectionNav('#digital-design')}
-            >
-              DIGITAL DESIGN
-            </a>
-            <Link
-              to="/contact"
-              className="border border-white/10 p-4 font-display text-[0.8rem] uppercase tracking-[0.18em] text-white/90 active:bg-white/5"
-              onClick={closeMobileMenu}
-            >
-              CONTACT
-            </Link>
             <Link
               to="/gallery"
               className="border border-white/10 p-4 font-display text-[0.8rem] uppercase tracking-[0.18em] text-white/90 active:bg-white/5"
@@ -349,6 +328,27 @@ function SiteHeader({
             >
               GALLERY
             </Link>
+            <Link
+              to="/contact"
+              className="border border-white/10 p-4 font-display text-[0.8rem] uppercase tracking-[0.18em] text-white/90 active:bg-white/5"
+              onClick={closeMobileMenu}
+            >
+              CONTACT
+            </Link>
+            <a
+              href="#digital-design"
+              className="border border-white/10 p-4 font-display text-[0.8rem] uppercase tracking-[0.18em] text-white/90 active:bg-white/5"
+              onClick={handleSectionNav('#digital-design')}
+            >
+              DIGITAL DESIGN
+            </a>
+            <a
+              href="#murals"
+              className="border border-white/10 p-4 font-display text-[0.8rem] uppercase tracking-[0.18em] text-white/90 active:bg-white/5"
+              onClick={handleSectionNav('#murals')}
+            >
+              MURALS
+            </a>
 
             {isAdmin ? (
               <Link

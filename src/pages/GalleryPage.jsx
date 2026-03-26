@@ -112,17 +112,76 @@ const getReducedRatioKey = (item) => {
 
 const isLandscape = (item) => getAspectRatio(item) > 1
 
-const areRatiosVerySimilar = (firstItem, secondItem) => {
-  const ratioA = getAspectRatio(firstItem)
-  const ratioB = getAspectRatio(secondItem)
-
-  if (!ratioA || !ratioB) {
-    return false
+const buildAutoArrangeOrder = (items) => {
+  if (!Array.isArray(items) || items.length <= 1) {
+    return items
   }
 
-  // Symmetric tolerance for close ratios (for example 1:1 with 0.97:1).
-  const normalizedDifference = Math.abs(Math.log(ratioA / ratioB))
-  return normalizedDifference <= 0.08
+  const groupsByRatio = new Map()
+
+  for (const item of items) {
+    const key = getReducedRatioKey(item)
+    if (!groupsByRatio.has(key)) {
+      groupsByRatio.set(key, [])
+    }
+    groupsByRatio.get(key).push(item)
+  }
+
+  const ratioGroups = Array.from(groupsByRatio.entries()).map(([key, grouped]) => ({
+    key,
+    grouped,
+    ratio: getAspectRatio(grouped[0]),
+    isLandscapeGroup: isLandscape(grouped[0]),
+  }))
+
+  const portraitOrSquareGroups = ratioGroups
+    .filter((group) => !group.isLandscapeGroup)
+    .sort((a, b) => {
+      if (b.grouped.length !== a.grouped.length) {
+        return b.grouped.length - a.grouped.length
+      }
+
+      return Math.abs(a.ratio - 1) - Math.abs(b.ratio - 1)
+    })
+
+  const landscapeGroups = ratioGroups
+    .filter((group) => group.isLandscapeGroup)
+    .sort((a, b) => b.ratio - a.ratio)
+
+  const portraitChunks = []
+  for (const group of portraitOrSquareGroups) {
+    for (let i = 0; i < group.grouped.length; i += 2) {
+      portraitChunks.push(group.grouped.slice(i, i + 2))
+    }
+  }
+
+  const landscapeSingles = landscapeGroups.flatMap((group) => group.grouped)
+
+  const arranged = []
+  let landscapeIndex = 0
+
+  for (let i = 0; i < portraitChunks.length; i += 1) {
+    arranged.push(...portraitChunks[i])
+
+    if ((i + 1) % 2 === 0 && landscapeIndex < landscapeSingles.length) {
+      arranged.push(landscapeSingles[landscapeIndex])
+      landscapeIndex += 1
+    }
+  }
+
+  while (landscapeIndex < landscapeSingles.length) {
+    arranged.push(landscapeSingles[landscapeIndex])
+    landscapeIndex += 1
+  }
+
+  const arrangedIds = new Set(arranged.map((item) => item.id))
+  for (const item of items) {
+    if (!arrangedIds.has(item.id)) {
+      arranged.push(item)
+    }
+  }
+
+  return arranged
 }
 
 const buildMobileRows = (orderedImages) => {
@@ -141,8 +200,7 @@ const buildMobileRows = (orderedImages) => {
       next &&
       !isLandscape(current) &&
       !isLandscape(next) &&
-      (getReducedRatioKey(current) === getReducedRatioKey(next) ||
-        areRatiosVerySimilar(current, next))
+      getReducedRatioKey(current) === getReducedRatioKey(next)
     ) {
       rows.push({ type: 'pair', items: [current, next] })
       index += 1
@@ -557,6 +615,18 @@ function GalleryPage() {
     setSuccessMessage('')
   }
 
+  const applyAutoArrange = () => {
+    if (managerImages.length <= 1) {
+      return
+    }
+
+    const nextOrder = buildAutoArrangeOrder(managerImages)
+    setManagerImages(nextOrder)
+    setDraggedId(null)
+    setErrorMessage('')
+    setSuccessMessage('Auto arrangement applied. Click Save order to publish.')
+  }
+
   const handleDeleteImage = async (image) => {
     if (!image?.id || !canUpload || !supabaseReady || !supabase) {
       return
@@ -705,6 +775,14 @@ function GalleryPage() {
                   </div>
 
                   <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={applyAutoArrange}
+                      className="rounded-full border border-black/15 bg-white px-4 py-2 text-[11px] uppercase tracking-[0.18em] text-[#111111] transition hover:border-black/30"
+                    >
+                      Auto Arrange
+                    </button>
+
                     <button
                       type="button"
                       onClick={resetManualOrder}
