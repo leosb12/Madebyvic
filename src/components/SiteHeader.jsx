@@ -258,6 +258,9 @@ function SiteHeader({
             <Link to="/services" className="story-link">
               SERVICES
             </Link>
+            <Link to="/gallery" className="story-link">
+              GALLERY
+            </Link>
             <a href="#murals" className="story-link" onClick={handleSectionNav('#murals')}>
               MURALS
             </a>
@@ -338,6 +341,13 @@ function SiteHeader({
               onClick={closeMobileMenu}
             >
               CONTACT
+            </Link>
+            <Link
+              to="/gallery"
+              className="border border-white/10 p-4 font-display text-[0.8rem] uppercase tracking-[0.18em] text-white/90 active:bg-white/5"
+              onClick={closeMobileMenu}
+            >
+              GALLERY
             </Link>
 
             {isAdmin ? (
